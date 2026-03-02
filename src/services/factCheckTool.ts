@@ -4,6 +4,7 @@ import { SubSearchAgent } from '../agents/subSearchAgent'
 import { withTimeout } from '../utils/async'
 import { isOllamaEnabled } from '../utils/apiConfig'
 import { buildFactCheckToolSearchPrompt, FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT } from '../utils/prompts'
+import { maybeSummarize } from '../utils/summary'
 import { truncate } from '../utils/text'
 import { ChatlunaSearchAgent } from './chatlunaSearch'
 import { OllamaSearchService } from './ollamaSearch'
@@ -26,20 +27,13 @@ type ProviderTaskOutcome =
 class FactCheckTool extends Tool {
   static HARD_TIMEOUT_MS = 120_000
 
-  get name(): string {
-    return this.toolName
-  }
-
-  get description(): string {
-    return this.toolDescription
-  }
+  name: string
+  description: string
 
   private readonly logger: any
   private readonly subSearchAgent: SubSearchAgent
   private readonly ollamaSearchService: OllamaSearchService
   private readonly backgroundTasks = new Set<Promise<ProviderTaskOutcome>>()
-  private readonly toolName: string
-  private readonly toolDescription: string
 
   constructor(
     private readonly ctx: Ctx,
@@ -48,8 +42,8 @@ class FactCheckTool extends Tool {
     toolDescription: string
   ) {
     super()
-    this.toolName = toolName
-    this.toolDescription = toolDescription
+    this.name = sanitizeToolName(toolName, 'fact_check')
+    this.description = sanitizeToolDescription(toolDescription, '用于网络搜索与事实核查。输入待核查文本，返回来源与摘要。')
     this.logger = ctx.logger('chatluna-fact-check')
     this.subSearchAgent = new SubSearchAgent(ctx, config)
     this.ollamaSearchService = new OllamaSearchService(ctx, config)
@@ -401,7 +395,8 @@ ${sourceText}`
         const ollamaContext = await this.buildOllamaSearchContext(claim)
 
         this.logger.info(`[ChatlunaTool] Context append result: chatluna=${Boolean(chatlunaContext)}, ollama=${Boolean(ollamaContext)}`)
-        return this.appendContext(this.appendContext(output, chatlunaContext), ollamaContext)
+        const combined = this.appendContext(this.appendContext(output, chatlunaContext), ollamaContext)
+        return this.summarizeOutput(combined, 'fact_check(single)')
       }
 
       const successResults: AgentSearchResult[] = []
@@ -486,14 +481,18 @@ ${sourceText}`
 
       const outputWithContext = this.appendContext(this.appendContext(output, chatlunaContext), ollamaContext)
       if (failedLabels.length > 0) {
-        return `${outputWithContext}\n\n[Failed]\n- ${failedLabels.join('\n- ')}`
+        return this.summarizeOutput(`${outputWithContext}\n\n[Failed]\n- ${failedLabels.join('\n- ')}`, 'fact_check(multi)')
       }
 
-      return outputWithContext
+      return this.summarizeOutput(outputWithContext, 'fact_check(multi)')
     } catch (error: any) {
       this.logger.error('[ChatlunaTool] 核查失败:', error)
       return `[MultiSourceSearch]\n搜索失败: ${error?.message || error}`
     }
+  }
+
+  private async summarizeOutput(output: string, label: string): Promise<string> {
+    return maybeSummarize(this.ctx, this.config, output, label)
   }
 
   static setHardTimeout(_ms: number): void {
@@ -515,9 +514,11 @@ export function registerFactCheckTool(ctx: Ctx, config: PluginConfig): void {
     return
   }
 
-  const quickToolName = config.factCheck.quickToolName?.trim() || 'fact_check'
-  const quickToolDescription = config.factCheck.quickToolDescription?.trim()
-    || '用于网络搜索与事实核查。输入待核查文本，返回来源与摘要。'
+  const quickToolName = sanitizeToolName(config.factCheck.quickToolName, 'fact_check')
+  const quickToolDescription = sanitizeToolDescription(
+    config.factCheck.quickToolDescription,
+    '用于网络搜索与事实核查。输入待核查文本，返回来源与摘要。'
+  )
 
   ctx.effect(() => {
     const disposables: Array<() => void> = []
@@ -528,11 +529,16 @@ export function registerFactCheckTool(ctx: Ctx, config: PluginConfig): void {
       const disposeQuick = chatluna.platform.registerTool(quickToolName, {
         createTool() {
           const tool = new FactCheckTool(ctx, config, quickToolName, quickToolDescription)
-          const resolvedName = typeof tool.name === 'string' ? tool.name.trim() : ''
+          const resolvedName = sanitizeToolName(tool.name, '')
           if (!resolvedName) {
-            ;(tool as any).name = 'fact_check'
+            tool.name = 'fact_check'
             logger.warn('[ChatlunaTool] 检测到空工具名，已回退为 fact_check')
           }
+
+          tool.description = sanitizeToolDescription(
+            tool.description,
+            '用于网络搜索与事实核查。输入待核查文本，返回来源与摘要。'
+          )
           return tool
         },
         selector() {
@@ -551,4 +557,23 @@ export function registerFactCheckTool(ctx: Ctx, config: PluginConfig): void {
       disposables.forEach((dispose) => dispose())
     }
   })
+}
+
+function sanitizeToolName(value: unknown, fallback: string): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) {
+    return fallback
+  }
+
+  const normalized = text
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 64)
+
+  return normalized || fallback
+}
+
+function sanitizeToolDescription(value: unknown, fallback: string): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text || fallback
 }

@@ -213,10 +213,14 @@ export function registerDeepSearchTool(ctx: Ctx, config: PluginConfig): void {
     const dispose = chatluna.platform.registerTool(DEEP_SEARCH_TOOL_NAME, {
       createTool() {
         const tool = new DeepSearchTool(ctx, config, taskService)
-        const resolvedName = typeof tool.name === 'string' ? tool.name.trim() : ''
+        const resolvedName = sanitizeToolName(tool.name, '')
         if (!resolvedName) {
-          ;(tool as any).name = DEEP_SEARCH_TOOL_NAME
+          tool.name = DEEP_SEARCH_TOOL_NAME
           logger.warn(`[DeepSearchTool] 检测到空工具名，已回退为 ${DEEP_SEARCH_TOOL_NAME}`)
+        }
+
+        if (!tool.description || typeof tool.description !== 'string') {
+          tool.description = DEEP_SEARCH_TOOL_DESCRIPTION
         }
         return tool
       },
@@ -232,4 +236,16 @@ export function registerDeepSearchTool(ctx: Ctx, config: PluginConfig): void {
       }
     }
   })
+}
+
+function sanitizeToolName(value: unknown, fallback: string): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) {
+    return fallback
+  }
+  const normalized = text
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 64)
+  return normalized || fallback
 }

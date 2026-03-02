@@ -33,6 +33,10 @@ export interface AgentConfig {
     fastReturnMinSuccess: number;
     fastReturnMaxWaitMs: number;
     maxFindingsChars: number;
+    enableSummary: boolean;
+    summaryModel: string;
+    summaryMaxChars: number;
+    summaryTimeoutMs: number;
 }
 export interface DeepSearchConfig {
     enable: boolean;

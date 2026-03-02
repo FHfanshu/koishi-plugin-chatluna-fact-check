@@ -19,7 +19,6 @@ export declare class DeepSearchTaskService {
     private executeTask;
     private notifyCharacterTaskCompletion;
     private buildCharacterMessage;
-    private clipText;
     private cleanupExpiredTasks;
     private generateTaskId;
     private getTaskTimeoutMs;

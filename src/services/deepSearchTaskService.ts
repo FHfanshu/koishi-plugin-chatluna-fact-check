@@ -4,6 +4,7 @@ import { h } from 'koishi'
 
 import { DeepSearchController } from '../agents/deepSearchController'
 import { withTimeout } from '../utils/async'
+import { clipText, maybeSummarize } from '../utils/summary'
 import { ChatlunaAdapter } from './chatluna'
 
 import type { DeepSearchTask, PluginConfig } from '../types'
@@ -125,10 +126,12 @@ export class DeepSearchTaskService {
       return
     }
 
-    const message = this.buildCharacterMessage(task)
-    if (!message) {
+    const rawMessage = this.buildCharacterMessage(task)
+    if (!rawMessage) {
       return
     }
+
+    const message = await maybeSummarize(this.ctx, this.config, rawMessage, `DeepSearch回推(${task.taskId})`)
 
     try {
       await character.broadcastOnBot(session, [h.text(message)])
@@ -144,7 +147,7 @@ export class DeepSearchTaskService {
 
   private buildCharacterMessage(task: DeepSearchTask): string {
     if (task.status === 'failed') {
-      return `深度搜索任务已完成，但执行失败。\nclaim: ${this.clipText(task.claim, 120)}\nerror: ${task.error || 'unknown error'}`
+      return `深度搜索任务已完成，但执行失败。\nclaim: ${clipText(task.claim, 120)}\nerror: ${task.error || 'unknown error'}`
     }
 
     if (task.status !== 'succeeded' || !task.report) {
@@ -154,30 +157,22 @@ export class DeepSearchTaskService {
     const report = task.report
     const confidence = Math.round(report.confidence * 100)
     const findings = report.keyFindings
-      .slice(0, 3)
-      .map((item, index) => `${index + 1}. ${this.clipText(item, 180)}`)
+      .slice(0, 5)
+      .map((item, index) => `${index + 1}. ${item}`)
       .join('\n')
 
     const findingsBlock = findings.length > 0 ? `\n关键发现:\n${findings}` : ''
 
     return [
       '深度搜索任务已完成，请基于以下摘要自然回复用户。',
-      `claim: ${this.clipText(task.claim, 120)}`,
-      `摘要: ${this.clipText(report.summary, 240)}`,
-      `结论: ${this.clipText(report.conclusion, 240)}`,
+      `claim: ${clipText(task.claim, 200)}`,
+      `摘要: ${report.summary}`,
+      `结论: ${report.conclusion}`,
       `置信度: ${confidence}%`,
       findingsBlock,
     ]
       .filter(Boolean)
       .join('\n')
-  }
-
-  private clipText(input: string, maxLength: number): string {
-    const text = (input || '').trim()
-    if (text.length <= maxLength) {
-      return text
-    }
-    return `${text.slice(0, maxLength)}...`
   }
 
   private cleanupExpiredTasks(): void {
