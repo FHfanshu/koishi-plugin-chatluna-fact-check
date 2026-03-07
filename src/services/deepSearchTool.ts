@@ -2,6 +2,7 @@ import { Tool } from '@langchain/core/tools'
 
 import { DeepSearchController } from '../agents/deepSearchController'
 import { withTimeout } from '../utils/async'
+import { extractUrls } from '../utils/url'
 import { ChatlunaAdapter } from './chatluna'
 import { DeepSearchTaskService } from './deepSearchTaskService'
 
@@ -193,7 +194,11 @@ class DeepSearchTool extends Tool {
       return output
     }
 
-    const directSources = [...new Set((sources || []).filter(Boolean))].slice(0, this.config.tools.maxSources || 5)
+    const directSources = [...new Set(
+      (sources || [])
+        .flatMap((source) => extractUrls(String(source || '').trim()))
+        .filter(Boolean)
+    )].slice(0, this.config.tools.maxSources || 5)
     const sourceText = directSources.length > 0
       ? directSources.map((source) => `- ${source}`).join('\n')
       : '- 无'

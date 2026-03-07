@@ -6,6 +6,7 @@ import { buildFactCheckToolSearchPrompt, FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT } 
 import { normalizeModelName } from '../utils/model'
 import { maybeSummarize } from '../utils/summary'
 import { truncate } from '../utils/text'
+import { extractUrls } from '../utils/url'
 
 import type { AgentSearchResult, PluginConfig, ProviderKey } from '../types'
 
@@ -97,7 +98,11 @@ class FactCheckTool extends Tool {
       return output
     }
 
-    const directSources = [...new Set((sources || []).filter(Boolean))].slice(0, this.config.tools.maxSources)
+    const directSources = [...new Set(
+      (sources || [])
+        .flatMap((source) => extractUrls(String(source || '').trim()))
+        .filter(Boolean)
+    )].slice(0, this.config.tools.maxSources)
     const sourceText = directSources.length > 0
       ? directSources.map((source) => `- ${source}`).join('\n')
       : '- 无'

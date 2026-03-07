@@ -10,6 +10,7 @@ import {
 } from '../utils/prompts'
 import { normalizeModelName } from '../utils/model'
 import { withTimeout } from '../utils/async'
+import { extractUrls } from '../utils/url'
 
 import type {
   AgentSearchResult,
@@ -411,9 +412,10 @@ export class DeepSearchController {
       return this.buildFallbackReport(history)
     }
 
+    const fallbackSources = this.collectAllSources(history)
     const sources = Array.isArray(parsed.sources)
-      ? parsed.sources.map((item: unknown) => String(item).trim()).filter(Boolean)
-      : this.collectAllSources(history)
+      ? this.normalizeSourceUrls(parsed.sources, fallbackSources)
+      : fallbackSources
 
     const keyFindings = Array.isArray(parsed.keyFindings)
       ? parsed.keyFindings.map((item: unknown) => String(item).trim()).filter(Boolean)
@@ -467,13 +469,22 @@ export class DeepSearchController {
   }
 
   private collectAllSources(history: DeepSearchHistory): string[] {
-    return [...new Set(
+    return this.normalizeSourceUrls(
       history.rounds
         .flatMap((round) => round.results)
-        .flatMap((result) => result.sources || [])
-        .map((source) => source.trim())
+        .flatMap((result) => result.sources || []),
+      []
+    )
+  }
+
+  private normalizeSourceUrls(items: unknown[], fallback: string[]): string[] {
+    const urls = [...new Set(
+      (items || [])
+        .flatMap((item) => extractUrls(String(item || '').trim()))
         .filter(Boolean)
     )]
+
+    return urls.length > 0 ? urls : fallback
   }
 
   private estimateConfidence(results: AgentSearchResult[]): number {

@@ -29,6 +29,7 @@ export declare class DeepSearchController {
     private buildFallbackReport;
     private collectTopFindings;
     private collectAllSources;
+    private normalizeSourceUrls;
     private estimateConfidence;
     private clampConfidence;
     private parseJson;
