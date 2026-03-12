@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import type { Context } from 'koishi'
+import type { Context, Logger } from 'koishi'
 
 import { Config } from './config'
 import type { PluginConfig } from './types'
@@ -81,6 +81,10 @@ export function apply(ctx: Context, config: PluginConfig): void {
     return
   }
 
+  if (config.debug?.logLLMDetails) {
+    promoteDebugLogsToInfo(logger)
+  }
+
   registerFactCheckTool(ctx as any, config)
   registerDeepSearchTool(ctx as any, config)
   registerWebFetchTool(ctx as any, config)
@@ -100,6 +104,16 @@ export function apply(ctx: Context, config: PluginConfig): void {
   })
 
   logger.info('chatluna-fact-check 插件已加载')
+}
+
+function promoteDebugLogsToInfo(logger: Logger): void {
+  const patchedLogger = logger as Logger & { __debugPromotedToInfo?: boolean }
+  if (patchedLogger.__debugPromotedToInfo) {
+    return
+  }
+
+  patchedLogger.__debugPromotedToInfo = true
+  logger.debug = logger.info.bind(logger) as Logger['debug']
 }
 
 export { Config }
