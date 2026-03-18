@@ -117,9 +117,14 @@ export class SubSearchAgent {
   private shouldFallbackToFastModel(error: unknown): boolean {
     const message = String((error as any)?.message || error || '').toLowerCase()
     return message.includes("unexpected token 'd'")
+      || message.includes("unexpected token 'e'")
       || message.includes('"data: {"')
       || message.includes('is not valid json')
       || message.includes('chat.completion.chunk')
+      || message.includes('event: error')
+      || message.includes('appchatreverse: chat failed, 429')
+      || message.includes('chat failed, 429')
+      || message.includes('status code: 429')
   }
 
   private normalizeDeepSearchGrokModel(preferredModel: string | undefined, fallbackModel: string | undefined): string {

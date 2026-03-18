@@ -126,9 +126,14 @@ export class ChatlunaAdapter {
 
     const message = String((error as any)?.message || error || '').toLowerCase()
     return message.includes("unexpected token 'd'")
+      || message.includes("unexpected token 'e'")
       || message.includes('is not valid json')
       || message.includes('chat.completion.chunk')
       || message.includes('"data: {"')
+      || message.includes('event: error')
+      || message.includes('appchatreverse: chat failed, 429')
+      || message.includes('chat failed, 429')
+      || message.includes('status code: 429')
   }
 
   private isModelTemporarilyBlocked(modelName: string): boolean {
