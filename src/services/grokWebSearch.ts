@@ -60,7 +60,7 @@ export class GrokWebSearchService {
       const parsed = JSON.parse(content.trim())
       if (Array.isArray(parsed)) return this.validateResults(parsed)
     } catch (error: any) {
-      this.logger.debug(`GrokWebSearch: json parse stage1 failed: ${error?.message || error}`)
+      this.logger.info(`GrokWebSearch: json parse stage1 failed: ${error?.message || error}`)
     }
 
     try {
@@ -70,7 +70,7 @@ export class GrokWebSearchService {
         if (Array.isArray(parsed)) return this.validateResults(parsed)
       }
     } catch (error: any) {
-      this.logger.debug(`GrokWebSearch: json parse stage2 failed: ${error?.message || error}`)
+      this.logger.info(`GrokWebSearch: json parse stage2 failed: ${error?.message || error}`)
     }
 
     try {
@@ -81,7 +81,7 @@ export class GrokWebSearchService {
         if (Array.isArray(parsed)) return this.validateResults(parsed)
       }
     } catch (error: any) {
-      this.logger.debug(`GrokWebSearch: json parse stage3 failed: ${error?.message || error}`)
+      this.logger.info(`GrokWebSearch: json parse stage3 failed: ${error?.message || error}`)
     }
 
     return []

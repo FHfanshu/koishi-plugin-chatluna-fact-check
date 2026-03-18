@@ -82,7 +82,7 @@ export function apply(ctx: Context, config: PluginConfig): void {
   }
 
   if (config.debug?.logLLMDetails) {
-    promoteDebugLogsToInfo(logger)
+    // debug日志已直接改为info级别
   }
 
   registerFactCheckTool(ctx as any, config)
@@ -104,16 +104,6 @@ export function apply(ctx: Context, config: PluginConfig): void {
   })
 
   logger.info('chatluna-fact-check 插件已加载')
-}
-
-function promoteDebugLogsToInfo(logger: Logger): void {
-  const patchedLogger = logger as Logger & { __debugPromotedToInfo?: boolean }
-  if (patchedLogger.__debugPromotedToInfo) {
-    return
-  }
-
-  patchedLogger.__debugPromotedToInfo = true
-  logger.debug = logger.info.bind(logger) as Logger['debug']
 }
 
 export { Config }

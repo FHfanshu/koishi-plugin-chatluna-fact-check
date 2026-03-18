@@ -1,4 +1,5 @@
-import { Tool } from '@langchain/core/tools'
+import { StructuredTool } from '@langchain/core/tools'
+import { z } from 'zod'
 
 import { DeepSearchController } from '../agents/deepSearchController'
 import { withTimeout } from '../utils/async'
@@ -20,9 +21,12 @@ type ParsedActionInputResult =
   | { type: 'invalid'; message: string }
   | { type: 'valid'; value: DeepSearchActionInput }
 
-class DeepSearchTool extends Tool {
+class DeepSearchTool extends StructuredTool<any> {
   name = DEEP_SEARCH_TOOL_NAME
   description = DEEP_SEARCH_TOOL_DESCRIPTION
+  schema = z.object({
+    input: z.string().min(1).describe('待深度搜索核查的文本。'),
+  })
 
   static HARD_TIMEOUT_MS = 900_000
 
@@ -39,12 +43,23 @@ class DeepSearchTool extends Tool {
     this.controller = new DeepSearchController(ctx, config, new ChatlunaAdapter(ctx, config))
   }
 
+  private unwrapInput(input: unknown): string {
+    if (typeof input === 'string') {
+      return input
+    }
+    if (input && typeof input === 'object' && 'input' in input) {
+      const raw = (input as { input?: unknown }).input
+      return typeof raw === 'string' ? raw : ''
+    }
+    return ''
+  }
+
   async _call(
-    input: string,
+    input: { input: string } | string,
     _runManager?: CallbackManagerForToolRun,
     parentConfig?: RunnableConfig
   ): Promise<string> {
-    const rawInput = (input || '').trim()
+    const rawInput = this.unwrapInput(input).trim()
     if (!rawInput) {
       return '[DeepSearch]\n输入为空，请提供需要核查的文本。'
     }

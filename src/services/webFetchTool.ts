@@ -1,4 +1,5 @@
-import { Tool } from '@langchain/core/tools'
+import { StructuredTool } from '@langchain/core/tools'
+import { z } from 'zod'
 
 import type { PluginConfig } from '../types'
 import { ChatlunaAdapter } from './chatluna'
@@ -9,9 +10,12 @@ import { isSafePublicHttpUrl, normalizeUrl } from '../utils/url'
 
 type Ctx = any
 
-class WebFetchTool extends Tool {
+class WebFetchTool extends StructuredTool<any> {
   name: string
   description: string
+  schema = z.object({
+    input: z.string().min(1).describe('要抓取的 URL。'),
+  })
 
   private readonly logger: any
   private readonly chatluna: ChatlunaAdapter
@@ -34,8 +38,19 @@ class WebFetchTool extends Tool {
     this.jinaReader = new JinaReaderService(ctx, config)
   }
 
-  async _call(input: string): Promise<string> {
-    const rawUrl = (input || '').trim()
+  private unwrapInput(input: unknown): string {
+    if (typeof input === 'string') {
+      return input
+    }
+    if (input && typeof input === 'object' && 'input' in input) {
+      const raw = (input as { input?: unknown }).input
+      return typeof raw === 'string' ? raw : ''
+    }
+    return ''
+  }
+
+  async _call(input: { input: string } | string): Promise<string> {
+    const rawUrl = this.unwrapInput(input).trim()
     if (!rawUrl) {
       return '[web_fetch]\n输入为空，请提供 URL。'
     }

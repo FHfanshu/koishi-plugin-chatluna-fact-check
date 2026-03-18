@@ -220,7 +220,7 @@ export class DeepSearchController {
     for (const supplemental of grokSupplementals) {
       const outcome = supplemental.capture()
       if (!outcome) {
-        this.logger.debug(`[DeepSearch] Grok 补充未在窗口内完成，已跳过: ${supplemental.focus}`)
+        this.logger.info(`[DeepSearch] Grok 补充未在窗口内完成，已跳过: ${supplemental.focus}`)
         continue
       }
 
@@ -232,13 +232,13 @@ export class DeepSearchController {
             perspective: `${outcome.value.perspective} (Grok补充)`,
           })
         } else {
-          this.logger.debug(`[DeepSearch] Grok 补充失败(${supplemental.focus}): ${outcome.value.error || outcome.value.findings}`)
+          this.logger.info(`[DeepSearch] Grok 补充失败(${supplemental.focus}): ${outcome.value.error || outcome.value.findings}`)
         }
         continue
       }
 
       const message = (outcome.reason as any)?.message || String(outcome.reason)
-      this.logger.debug(`[DeepSearch] Grok 补充超时/失败(${supplemental.focus}): ${message}`)
+      this.logger.info(`[DeepSearch] Grok 补充超时/失败(${supplemental.focus}): ${message}`)
     }
 
     return results

@@ -1,4 +1,5 @@
-import { Tool } from '@langchain/core/tools'
+import { StructuredTool } from '@langchain/core/tools'
+import { z } from 'zod'
 
 import { SubSearchAgent } from '../agents/subSearchAgent'
 import { withTimeout } from '../utils/async'
@@ -23,11 +24,14 @@ type ProviderTaskOutcome =
   | { index: number; provider: ToolProvider; status: 'rejected'; reason: unknown }
   | { status: 'timeout' }
 
-class FactCheckTool extends Tool {
+class FactCheckTool extends StructuredTool<any> {
   static HARD_TIMEOUT_MS = 600_000
 
   name: string
   description: string
+  schema = z.object({
+    input: z.string().min(1).describe('待核查的文本。'),
+  })
 
   private readonly logger: any
   private readonly subSearchAgent: SubSearchAgent
@@ -130,9 +134,9 @@ class FactCheckTool extends Tool {
   private trackBackgroundTask(task: Promise<ProviderTaskOutcome>, label: string): void {
     this.backgroundTasks.add(task)
     task.then(() => {
-      this.logger.debug(`[ChatlunaTool] 后台任务完成: ${label}`)
+      this.logger.info(`[ChatlunaTool] 后台任务完成: ${label}`)
     }).catch((error: any) => {
-      this.logger.debug(`[ChatlunaTool] 后台任务失败: ${label}: ${error?.message || error}`)
+      this.logger.info(`[ChatlunaTool] 后台任务失败: ${label}: ${error?.message || error}`)
     }).finally(() => {
       this.backgroundTasks.delete(task)
     })
@@ -210,8 +214,19 @@ ${sourceText}`
     return this.appendDirectSourcesBlock(parts.join('\n'), dedupedSources)
   }
 
-  async _call(input: string): Promise<string> {
-    const rawClaim = (input || '').trim()
+  private unwrapInput(input: unknown): string {
+    if (typeof input === 'string') {
+      return input
+    }
+    if (input && typeof input === 'object' && 'input' in input) {
+      const raw = (input as { input?: unknown }).input
+      return typeof raw === 'string' ? raw : ''
+    }
+    return ''
+  }
+
+  async _call(input: { input: string } | string): Promise<string> {
+    const rawClaim = this.unwrapInput(input).trim()
     if (!rawClaim) {
       return '[GrokSearch]\n输入为空，请提供需要检索的文本。'
     }

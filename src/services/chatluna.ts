@@ -53,7 +53,7 @@ export class ChatlunaAdapter {
       }
 
       messages.push(new HumanMessage({ content: multimodalContent }))
-      this.logger.debug(`构建多模态消息，包含 ${request.images.length} 张图片`)
+      this.logger.info(`构建多模态消息，包含 ${request.images.length} 张图片`)
     } else {
       messages.push(new HumanMessage(messageContent))
     }
@@ -70,7 +70,7 @@ export class ChatlunaAdapter {
 
     const response = await model.invoke(messages, invokeOptions)
     const processingTime = Date.now() - startTime
-    this.logger.debug(`Chatluna 请求完成，耗时 ${processingTime}ms`)
+    this.logger.info(`Chatluna 请求完成，耗时 ${processingTime}ms`)
 
     const content = typeof response.content === 'string'
       ? response.content

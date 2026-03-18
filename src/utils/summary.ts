@@ -45,7 +45,7 @@ export async function maybeSummarize(
   const maxChars = config.search.summaryMaxChars || 800
 
   if (!config.search.enableSummary) {
-    logger.debug(`[Summary] 已禁用摘要压缩，保留原始输出: ${label}`)
+    logger.info(`[Summary] 已禁用摘要压缩，保留原始输出: ${label}`)
     return text
   }
 
@@ -55,7 +55,7 @@ export async function maybeSummarize(
 
   const model = resolveSummaryModel(config)
   if (!model) {
-    logger.debug(`[Summary] 无可用摘要模型，回退截断: ${label}`)
+    logger.info(`[Summary] 无可用摘要模型，回退截断: ${label}`)
     return clipText(text, maxChars)
   }
 

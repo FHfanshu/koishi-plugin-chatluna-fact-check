@@ -79,7 +79,7 @@ ${focus}
     }
 
     if (provider && !enabled.includes(provider)) {
-      this.logger.debug(`[IterativeSearch] provider=${provider} 已禁用，回退到 ${enabled[0]}`)
+      this.logger.info(`[IterativeSearch] provider=${provider} 已禁用，回退到 ${enabled[0]}`)
     }
 
     return enabled[0]
