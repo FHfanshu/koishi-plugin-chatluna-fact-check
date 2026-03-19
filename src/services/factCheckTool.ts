@@ -234,7 +234,7 @@ class FactCheckTool extends StructuredTool<any> {
       const outcome = await this.waitNextOutcome(active, remainingMs)
 
       if (outcome.status === 'timeout') {
-        this.logger.info(`[FactCheckTool] 达到快速返回等待上限 ${maxWaitMs}ms`)
+        this.logger.info(`[FactCheckTool] 达到总超时上限 ${maxWaitMs}ms，剩余 ${active.size} 个来源未完成`)
         break
       }
 
@@ -245,9 +245,6 @@ class FactCheckTool extends StructuredTool<any> {
           failedLabels.push(outcome.value.perspective || `source-${outcome.index + 1}`)
         } else {
           successResults.push(outcome.value)
-          if (successResults.length >= 1) {
-            break
-          }
         }
       } else {
         failedLabels.push(this.getSourcePerspective(outcome.source, outcome.index))
