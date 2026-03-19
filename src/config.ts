@@ -4,15 +4,15 @@ import type { PluginConfig, SourceConfig } from './types'
 
 const sourceSchema = Schema.union([
   Schema.object({
-    type: Schema.const('chatluna_model').description('来源类型。'),
+    type: Schema.const('chatluna_model').default('chatluna_model').description('来源类型。'),
     label: Schema.string().default('ChatlunaSearch').description('来源标签。'),
     model: Schema.dynamic('model').default('').description('搜索模型。'),
-  }),
+  }).description('Chatluna 模型来源。'),
   Schema.object({
-    type: Schema.const('tavily').description('来源类型。'),
+    type: Schema.const('tavily').default('tavily').description('来源类型。'),
     label: Schema.string().default('TavilySearch').description('来源标签。'),
     tavilyApiKey: Schema.string().role('secret').default('').description('Tavily API Key。'),
-  }),
+  }).description('Tavily API 来源。'),
 ]) as Schema<SourceConfig>
 
 const baseSchema = Schema.object({
