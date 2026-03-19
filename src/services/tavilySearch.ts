@@ -25,15 +25,15 @@ export class TavilySearchService {
     this.logger = ctx.logger('chatluna-fact-check')
   }
 
-  async search(query: string, apiKey: string, label: string): Promise<AgentSearchResult> {
-    const normalizedLabel = (label || 'TavilySearch').trim() || 'TavilySearch'
+  async search(query: string, apiKey: string, perspective = 'TavilySearch'): Promise<AgentSearchResult> {
+    const normalizedPerspective = (perspective || 'TavilySearch').trim() || 'TavilySearch'
     const cleanedApiKey = (apiKey || '').trim()
     const cleanedQuery = (query || '').trim()
 
     if (!cleanedQuery) {
       return {
         agentId: 'tavily-search',
-        perspective: normalizedLabel,
+        perspective: normalizedPerspective,
         findings: '搜索失败: 查询为空。',
         sources: [],
         confidence: 0,
@@ -45,7 +45,7 @@ export class TavilySearchService {
     if (!cleanedApiKey) {
       return {
         agentId: 'tavily-search',
-        perspective: normalizedLabel,
+        perspective: normalizedPerspective,
         findings: '搜索失败: Tavily API Key 未配置。',
         sources: [],
         confidence: 0,
@@ -89,7 +89,7 @@ export class TavilySearchService {
 
       return {
         agentId: 'tavily-search',
-        perspective: normalizedLabel,
+        perspective: normalizedPerspective,
         findings,
         sources,
         confidence: 0.5,
@@ -98,7 +98,7 @@ export class TavilySearchService {
       this.logger.warn(`[TavilySearch] 请求失败: ${error?.message || error}`)
       return {
         agentId: 'tavily-search',
-        perspective: normalizedLabel,
+        perspective: normalizedPerspective,
         findings: `搜索失败: ${error?.message || error}`,
         sources: [],
         confidence: 0,

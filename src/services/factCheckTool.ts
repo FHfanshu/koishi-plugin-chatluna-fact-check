@@ -67,26 +67,42 @@ class FactCheckTool extends StructuredTool<any> {
     })
   }
 
+  private getSourcePerspective(source: SourceConfig, index: number): string {
+    if (source.type === 'chatluna_model') {
+      return normalizeModelName(source.model) || `ChatlunaSearch-${index + 1}`
+    }
+    return `TavilySearch-${index + 1}`
+  }
+
+  private getSourceLogLabel(source: SourceConfig, index: number): string {
+    if (source.type === 'chatluna_model') {
+      const model = normalizeModelName(source.model)
+      return model ? `chatluna:${model}` : `chatluna:source-${index + 1}`
+    }
+    return `tavily:source-${index + 1}`
+  }
+
   private createSourceTask(claim: string, source: SourceConfig, index: number): Promise<SourceTaskOutcome> {
+    const perspective = this.getSourcePerspective(source, index)
     const task = source.type === 'chatluna_model'
       ? this.subSearchAgent.deepSearchWithModel(
           claim,
           normalizeModelName(source.model),
           `fact-check-${index + 1}`,
-          source.label || `ChatlunaSearch-${index + 1}`,
+          perspective,
           buildFactCheckToolSearchPrompt(claim),
           FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT
         )
       : this.tavilySearch.search(
           claim,
           source.tavilyApiKey,
-          source.label || `TavilySearch-${index + 1}`
+          perspective
         )
 
     return withTimeout(
       task,
       Math.max(5, this.config.search.perSourceTimeout || 45) * 1000,
-      source.type === 'chatluna_model' ? `chatluna:${source.label}` : `tavily:${source.label}`
+      this.getSourceLogLabel(source, index)
     )
       .then((value) => ({ index, source, status: 'fulfilled' as const, value }))
       .catch((reason) => ({ index, source, status: 'rejected' as const, reason }))
@@ -241,15 +257,14 @@ class FactCheckTool extends StructuredTool<any> {
           }
         }
       } else {
-        const label = outcome.source.label || `source-${outcome.index + 1}`
-        failedLabels.push(label)
+        failedLabels.push(this.getSourcePerspective(outcome.source, outcome.index))
       }
     }
 
     if (active.size > 0) {
       active.forEach((task, index) => {
         const source = configuredSources[index]
-        this.trackBackgroundTask(task, source?.label || `source-${index + 1}`)
+        this.trackBackgroundTask(task, source ? this.getSourcePerspective(source, index) : `source-${index + 1}`)
       })
     }
 

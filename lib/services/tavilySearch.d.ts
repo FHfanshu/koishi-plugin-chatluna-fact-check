@@ -5,6 +5,6 @@ export declare class TavilySearchService {
     private readonly config;
     private readonly logger;
     constructor(ctx: Ctx, config: PluginConfig);
-    search(query: string, apiKey: string, label: string): Promise<AgentSearchResult>;
+    search(query: string, apiKey: string, perspective?: string): Promise<AgentSearchResult>;
 }
 export {};

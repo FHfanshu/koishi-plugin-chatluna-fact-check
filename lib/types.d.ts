@@ -1,11 +1,9 @@
 export interface SourceChatlunaModelConfig {
     type: 'chatluna_model';
-    label: string;
     model: string;
 }
 export interface SourceTavilyConfig {
     type: 'tavily';
-    label: string;
     tavilyApiKey: string;
 }
 export type SourceConfig = SourceChatlunaModelConfig | SourceTavilyConfig;
