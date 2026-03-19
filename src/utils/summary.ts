@@ -1,6 +1,7 @@
 import { ChatlunaAdapter } from '../services/chatluna'
 import { withTimeout } from './async'
 import { normalizeModelName } from './model'
+import { collectChatlunaModels } from './sources'
 
 import type { PluginConfig } from '../types'
 
@@ -23,13 +24,9 @@ export function clipText(input: string, maxLength: number): string {
 }
 
 export function resolveSummaryModel(config: PluginConfig): string {
-  const source = (config.search.sources || []).find((item) => (
-    item.type === 'chatluna_model'
-      && normalizeModelName(item.model)
-  ))
-
-  if (source?.type === 'chatluna_model') {
-    return normalizeModelName(source.model)
+  const model = collectChatlunaModels(config)[0]
+  if (model) {
+    return normalizeModelName(model)
   }
 
   return ''

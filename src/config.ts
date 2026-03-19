@@ -2,7 +2,13 @@ import { Schema } from 'koishi'
 
 import type { PluginConfig, SourceConfig } from './types'
 
-const sourceSchema = Schema.union([
+const customSourceSchema = Schema.object({
+  provider: Schema.string().default('tavily').description('来源标识（例如 chatluna、tavily）。'),
+  model: Schema.dynamic('model').default('').description('Chatluna 模型（provider=chatluna 时使用）。'),
+  tavilyApiKey: Schema.string().role('secret').default('').description('Tavily API Key（provider=tavily 时使用）。'),
+}).description('自定义来源项。') as Schema<SourceConfig>
+
+const legacySourceSchema = Schema.union([
   Schema.object({
     type: Schema.const('chatluna_model').default('chatluna_model').description('来源类型。'),
     model: Schema.dynamic('model').default('').description('搜索模型。'),
@@ -11,7 +17,7 @@ const sourceSchema = Schema.union([
     type: Schema.const('tavily').default('tavily').description('来源类型。'),
     tavilyApiKey: Schema.string().role('secret').default('').description('Tavily API Key。'),
   }).description('Tavily API 来源。'),
-]) as Schema<SourceConfig>
+]).description('旧版来源列表（兼容读取，不建议新增）。')
 
 const baseSchema = Schema.object({
   timeoutSeconds: Schema.number().min(5).max(600).default(120).description('快速返回最大等待秒数。'),
@@ -31,7 +37,15 @@ const toolSchema = Schema.object({
 
 const searchSchema = Schema.object({
   search: Schema.object({
-    sources: Schema.array(sourceSchema).default([]).description('搜索来源列表。'),
+    chatluna: Schema.object({
+      models: Schema.array(
+        Schema.dynamic('model').description('搜索模型。')
+      ).default([]).description('Chatluna 模型列表。'),
+    }).description('Chatluna 模型来源。'),
+    custom: Schema.object({
+      sources: Schema.array(customSourceSchema).default([]).description('可扩展来源列表。'),
+    }).description('可扩展来源。'),
+    sources: Schema.array(legacySourceSchema).default([]).hidden().description('旧版来源列表。'),
     perSourceTimeout: Schema.number().min(5).max(180).default(45).description('单来源超时秒数。'),
     maxFindingsChars: Schema.number().min(200).max(12_000).default(3_000).description('单来源结论最大字符数。'),
   }).description('搜索配置。'),

@@ -2,7 +2,7 @@ import { StructuredTool } from '@langchain/core/tools'
 import { z } from 'zod'
 
 import { SubSearchAgent } from '../agents/subSearchAgent'
-import type { AgentSearchResult, PluginConfig, SourceConfig } from '../types'
+import type { AgentSearchResult, PluginConfig } from '../types'
 import { TavilySearchService } from './tavilySearch'
 import { withTimeout } from '../utils/async'
 import { normalizeModelName } from '../utils/model'
@@ -10,12 +10,13 @@ import { buildFactCheckToolSearchPrompt, FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT } 
 import { maybeSummarize } from '../utils/summary'
 import { truncate } from '../utils/text'
 import { extractUrls } from '../utils/url'
+import { collectSearchSources, type ResolvedSearchSource } from '../utils/sources'
 
 type Ctx = any
 
 type SourceTaskOutcome =
-  | { index: number; source: SourceConfig; status: 'fulfilled'; value: AgentSearchResult }
-  | { index: number; source: SourceConfig; status: 'rejected'; reason: unknown }
+  | { index: number; source: ResolvedSearchSource; status: 'fulfilled'; value: AgentSearchResult }
+  | { index: number; source: ResolvedSearchSource; status: 'rejected'; reason: unknown }
   | { status: 'timeout' }
 
 class FactCheckTool extends StructuredTool<any> {
@@ -55,36 +56,28 @@ class FactCheckTool extends StructuredTool<any> {
     return ''
   }
 
-  private getConfiguredSources(): SourceConfig[] {
-    return (this.config.search.sources || []).filter((source) => {
-      if (source.type === 'chatluna_model') {
-        return Boolean(normalizeModelName(source.model))
-      }
-      if (source.type === 'tavily') {
-        return Boolean((source.tavilyApiKey || '').trim())
-      }
-      return false
-    })
+  private getConfiguredSources(): ResolvedSearchSource[] {
+    return collectSearchSources(this.config)
   }
 
-  private getSourcePerspective(source: SourceConfig, index: number): string {
-    if (source.type === 'chatluna_model') {
+  private getSourcePerspective(source: ResolvedSearchSource, index: number): string {
+    if (source.kind === 'chatluna_model') {
       return normalizeModelName(source.model) || `ChatlunaSearch-${index + 1}`
     }
-    return `TavilySearch-${index + 1}`
+    return index > 0 ? `TavilySearch-${index + 1}` : 'TavilySearch'
   }
 
-  private getSourceLogLabel(source: SourceConfig, index: number): string {
-    if (source.type === 'chatluna_model') {
+  private getSourceLogLabel(source: ResolvedSearchSource, index: number): string {
+    if (source.kind === 'chatluna_model') {
       const model = normalizeModelName(source.model)
       return model ? `chatluna:${model}` : `chatluna:source-${index + 1}`
     }
-    return `tavily:source-${index + 1}`
+    return `tavily:${source.provider || `source-${index + 1}`}`
   }
 
-  private createSourceTask(claim: string, source: SourceConfig, index: number): Promise<SourceTaskOutcome> {
+  private createSourceTask(claim: string, source: ResolvedSearchSource, index: number): Promise<SourceTaskOutcome> {
     const perspective = this.getSourcePerspective(source, index)
-    const task = source.type === 'chatluna_model'
+    const task = source.kind === 'chatluna_model'
       ? this.subSearchAgent.deepSearchWithModel(
           claim,
           normalizeModelName(source.model),

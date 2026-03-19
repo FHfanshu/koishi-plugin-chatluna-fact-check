@@ -1,5 +1,5 @@
 import { ChatlunaAdapter } from './chatluna'
-import { normalizeModelName } from '../utils/model'
+import { collectChatlunaModels } from '../utils/sources'
 
 import type { PluginConfig } from '../types'
 
@@ -21,9 +21,7 @@ export class GrokWebSearchService {
   }
 
   private resolveChatlunaSearchModel(): string {
-    for (const source of this.config.search.sources || []) {
-      if (source.type !== 'chatluna_model') continue
-      const model = normalizeModelName(source.model)
+    for (const model of collectChatlunaModels(this.config)) {
       if (model) return model
     }
     return ''

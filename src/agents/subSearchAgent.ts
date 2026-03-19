@@ -1,6 +1,7 @@
 import { ChatlunaAdapter } from '../services/chatluna'
 import { buildSubSearchPrompt, DEEP_SEARCH_AGENT_SYSTEM_PROMPT } from '../utils/prompts'
 import { normalizeModelName } from '../utils/model'
+import { collectChatlunaModels } from '../utils/sources'
 
 import type { AgentSearchResult, PluginConfig } from '../types'
 
@@ -99,9 +100,7 @@ export class SubSearchAgent {
 
   private resolveFallbackModel(currentModel: string): string {
     const normalizedCurrent = normalizeModelName(currentModel)
-    for (const source of this.config.search.sources || []) {
-      if (source.type !== 'chatluna_model') continue
-      const model = normalizeModelName(source.model)
+    for (const model of collectChatlunaModels(this.config)) {
       if (model && model !== normalizedCurrent) {
         return model
       }

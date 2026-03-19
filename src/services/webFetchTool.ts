@@ -4,9 +4,9 @@ import { z } from 'zod'
 import type { PluginConfig } from '../types'
 import { ChatlunaAdapter } from './chatluna'
 import { JinaReaderService } from './jinaReader'
-import { normalizeModelName } from '../utils/model'
 import { truncate } from '../utils/text'
 import { isSafePublicHttpUrl, normalizeUrl } from '../utils/url'
+import { collectChatlunaModels } from '../utils/sources'
 
 type Ctx = any
 
@@ -93,9 +93,7 @@ class WebFetchTool extends StructuredTool<any> {
   }
 
   private resolveChatlunaSearchModel(): string {
-    for (const source of this.config.search.sources || []) {
-      if (source.type !== 'chatluna_model') continue
-      const model = normalizeModelName(source.model)
+    for (const model of collectChatlunaModels(this.config)) {
       if (model) return model
     }
     return ''

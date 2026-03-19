@@ -1,10 +1,12 @@
 export interface SourceChatlunaModelConfig {
-  type: 'chatluna_model'
+  provider: string
   model: string
+  tavilyApiKey?: string
 }
 
 export interface SourceTavilyConfig {
-  type: 'tavily'
+  provider: string
+  model?: string
   tavilyApiKey: string
 }
 
@@ -22,7 +24,12 @@ export interface Config {
     forceExposeSources: boolean
   }
   search: {
-    sources: SourceConfig[]
+    chatluna: {
+      models: string[]
+    }
+    custom: {
+      sources: SourceConfig[]
+    }
     perSourceTimeout: number
     maxFindingsChars: number
   }
