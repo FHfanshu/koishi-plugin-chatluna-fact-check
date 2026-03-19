@@ -18,31 +18,40 @@ const PLUGIN_NAMES = new Set([
   'koishi-plugin-chatluna-fact-check',
 ])
 
+function isFactCheckPluginName(name: string | undefined): boolean {
+  if (!name) return false
+  if (PLUGIN_NAMES.has(name)) return true
+  for (const pluginName of PLUGIN_NAMES) {
+    if (name.startsWith(`${pluginName}:`)) return true
+  }
+  return false
+}
+
 const NAV_GROUPS: NavGroup[] = [
   {
-    title: '基础与工具',
+    title: '基础',
     sections: [
-      { key: 'base', title: '基础' },
-      { key: 'tool', title: 'tool' },
+      { key: 'base', title: '基础设置' },
+      { key: 'tool', title: '工具设置' },
     ],
   },
   {
     title: '搜索与抓取',
     sections: [
-      { key: 'search', title: 'search' },
-      { key: 'web_fetch', title: 'web_fetch' },
-      { key: 'jina', title: 'jina' },
+      { key: 'search', title: '搜索设置' },
+      { key: 'web_fetch', title: '网页抓取设置' },
+      { key: 'jina', title: 'Jina 设置' },
     ],
   },
 ] 
 
 const NAV_SECTIONS: NavSection[] = NAV_GROUPS.flatMap((group) => group.sections)
 const SECTION_TITLE_ALIASES: Record<NavSection['key'], string[]> = {
-  base: ['基础'],
-  tool: ['tool', '工具配置'],
-  search: ['search', '搜索配置'],
-  web_fetch: ['web_fetch', '网页抓取配置'],
-  jina: ['jina', 'Jina 配置'],
+  base: ['基础设置'],
+  tool: ['工具设置', '工具配置'],
+  search: ['搜索设置', '搜索配置'],
+  web_fetch: ['网页抓取设置', '网页抓取配置'],
+  jina: ['Jina 设置', 'Jina 配置'],
 }
 
 const STYLE_ID = 'isthattrue-nav-style'
@@ -53,71 +62,117 @@ function ensureStyle() {
   style.id = STYLE_ID
   style.textContent = `
 .isthattrue-nav {
-  position: fixed;
-  top: 260px;
-  right: 60px;
+  position: absolute;
   z-index: 1000;
-  width: 140px;
+  width: 200px;
   max-width: 90vw;
+  max-height: 70vh;
+  background: var(--k-card-bg);
+  border-radius: 8px;
+  box-shadow: var(--k-card-shadow);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--k-card-border);
   user-select: none;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+}
+@media (max-width: 768px) {
+  .isthattrue-nav { width: 160px; max-height: 50vh; }
+}
+.isthattrue-nav:hover {
+  box-shadow: var(--k-card-shadow-hover, 0 4px 16px rgba(0,0,0,.15));
 }
 .isthattrue-nav-header {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--k-color-border, #4b5563);
-  background: color-mix(in srgb, var(--k-color-bg, #1f2937) 94%, white);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--k-color-divider, #ebeef5);
+  background-color: var(--k-hover-bg);
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   cursor: move;
-  touch-action: none;
+  transition: background-color 0.2s;
+}
+.isthattrue-nav-header:hover {
+  background-color: var(--k-activity-bg);
 }
 .isthattrue-nav-handle {
-  color: var(--k-text-light, #9ca3af);
-  font-size: 14px;
-  line-height: 1;
+  color: var(--k-text-light);
+  cursor: grab;
+  transition: color 0.2s;
+}
+.isthattrue-nav-handle:active {
+  cursor: grabbing;
+  color: var(--k-color-primary);
 }
 .isthattrue-nav-toggle {
   border: none;
   background: transparent;
-  color: var(--k-text-light, #9ca3af);
+  color: var(--k-text-light);
   cursor: pointer;
   padding: 0;
   font-size: 14px;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  transition: transform 0.3s ease, color 0.2s;
+}
+.isthattrue-nav-toggle:hover {
+  color: var(--k-text-active);
 }
 .isthattrue-nav-body {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  overflow-y: auto;
+  padding: 4px 0;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  opacity: 1;
 }
+.isthattrue-nav-body::-webkit-scrollbar { width: 6px; }
+.isthattrue-nav-body::-webkit-scrollbar-thumb { background: var(--k-scroll-thumb); border-radius: 3px; }
+.isthattrue-nav-body::-webkit-scrollbar-track { background: transparent; }
 .isthattrue-nav.collapsed .isthattrue-nav-body {
-  display: none;
+  max-height: 0;
+  padding: 0;
+  opacity: 0;
+  overflow: hidden;
 }
-.isthattrue-nav-item {
-  border: none;
-  background: transparent;
-  color: var(--k-text, #d1d5db);
-  text-align: left;
-  padding: 6px 4px;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1.4;
+.isthattrue-nav.collapsed .isthattrue-nav-toggle {
+  transform: rotate(-90deg);
 }
-.isthattrue-nav-item:hover {
-  color: var(--k-color-primary, #4f7cff);
+.isthattrue-nav.collapsed .isthattrue-nav-header {
+  border-bottom: none;
 }
-.isthattrue-nav-item.active {
-  color: var(--k-color-primary, #4f7cff);
+.isthattrue-nav-section {
+  margin-bottom: 4px;
 }
-.isthattrue-nav-group {
-  margin-top: 4px;
-  padding: 6px 4px 2px;
+.isthattrue-nav-section-title {
+  padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--k-text-light, #9ca3af);
-  opacity: 0.9;
+  color: var(--k-text-light);
+  background-color: var(--k-bg-light);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.isthattrue-nav-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--k-text);
+  text-align: left;
+  padding: 5px 12px 5px 20px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+  transition: background-color 0.15s, color 0.15s;
+}
+.isthattrue-nav-item:hover {
+  background-color: var(--k-hover-bg);
+  color: var(--k-text-active);
+}
+.isthattrue-nav-item.active {
+  color: var(--k-color-primary);
+  background-color: var(--k-hover-bg);
 }
 /* Shrink nested sub-section headers inside intersect groups. */
 .k-schema-group .k-schema-group .k-schema-header {
@@ -173,11 +228,14 @@ function mountFloatingNav() {
   root.innerHTML = `
 <div class="isthattrue-nav-header">
   <span class="isthattrue-nav-handle">⋮⋮</span>
-  <button class="isthattrue-nav-toggle" type="button">⌄</button>
+  <button class="isthattrue-nav-toggle" type="button">−</button>
 </div>
 <div class="isthattrue-nav-body"></div>
 `
   document.body.appendChild(root)
+
+  root.style.top = '260px'
+  root.style.right = '60px'
 
   const body = root.querySelector<HTMLElement>('.isthattrue-nav-body')!
   const toggle = root.querySelector<HTMLButtonElement>('.isthattrue-nav-toggle')!
@@ -185,10 +243,13 @@ function mountFloatingNav() {
 
   const itemMap = new Map<string, HTMLButtonElement>()
   for (const group of NAV_GROUPS) {
-    const groupTitle = document.createElement('div')
-    groupTitle.className = 'isthattrue-nav-group'
-    groupTitle.textContent = group.title
-    body.appendChild(groupTitle)
+    const sectionEl = document.createElement('div')
+    sectionEl.className = 'isthattrue-nav-section'
+
+    const sectionTitle = document.createElement('div')
+    sectionTitle.className = 'isthattrue-nav-section-title'
+    sectionTitle.textContent = group.title
+    sectionEl.appendChild(sectionTitle)
 
     for (const section of group.sections) {
       const button = document.createElement('button')
@@ -201,15 +262,16 @@ function mountFloatingNav() {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }
       })
-      body.appendChild(button)
+      sectionEl.appendChild(button)
       itemMap.set(section.key, button)
     }
+    body.appendChild(sectionEl)
   }
 
   toggle.addEventListener('click', (event) => {
     event.stopPropagation()
     const collapsed = root.classList.toggle('collapsed')
-    toggle.textContent = collapsed ? '⌃' : '⌄'
+    toggle.textContent = collapsed ? '+' : '−'
   })
 
   let dragStartX = 0
@@ -290,10 +352,10 @@ const FactCheckDetailsLoader = defineComponent({
   name: 'FactCheckDetailsLoader',
   setup() {
     const pluginName = inject<ComputedRef<string>>('plugin:name')
-    const isOwn = computed(() => {
-      const current = pluginName?.value
-      return !!current && PLUGIN_NAMES.has(current)
-    })
+      const isOwn = computed(() => {
+        const current = pluginName?.value
+        return isFactCheckPluginName(current)
+      })
 
     let dispose: (() => void) | null = null
 

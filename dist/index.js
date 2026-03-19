@@ -1,104 +1,158 @@
-import { defineComponent as I, inject as T, computed as M, onMounted as N, watch as _, onBeforeUnmount as z, h as A } from "vue";
-const P = /* @__PURE__ */ new Set([
+import { defineComponent as N, inject as T, computed as M, onMounted as P, watch as A, onBeforeUnmount as _, h as z } from "vue";
+const y = /* @__PURE__ */ new Set([
   "isthattrue",
   // legacy package name
   "chatluna-fact-check",
   "koishi-plugin-isthattrue",
   // legacy package name
   "koishi-plugin-chatluna-fact-check"
-]), S = [
+]);
+function O(t) {
+  if (!t) return !1;
+  if (y.has(t)) return !0;
+  for (const e of y)
+    if (t.startsWith(`${e}:`)) return !0;
+  return !1;
+}
+const S = [
   {
-    title: "基础与工具",
+    title: "基础",
     sections: [
-      { key: "base", title: "基础" },
-      { key: "tool", title: "tool" }
+      { key: "base", title: "基础设置" },
+      { key: "tool", title: "工具设置" }
     ]
   },
   {
     title: "搜索与抓取",
     sections: [
-      { key: "search", title: "search" },
-      { key: "web_fetch", title: "web_fetch" },
-      { key: "jina", title: "jina" }
+      { key: "search", title: "搜索设置" },
+      { key: "web_fetch", title: "网页抓取设置" },
+      { key: "jina", title: "Jina 设置" }
     ]
   }
-], O = S.flatMap((t) => t.sections), C = {
-  base: ["基础"],
-  tool: ["tool", "工具配置"],
-  search: ["search", "搜索配置"],
-  web_fetch: ["web_fetch", "网页抓取配置"],
-  jina: ["jina", "Jina 配置"]
-}, k = "isthattrue-nav-style";
-function j() {
-  if (document.getElementById(k)) return;
+], B = S.flatMap((t) => t.sections), E = {
+  base: ["基础设置"],
+  tool: ["工具设置", "工具配置"],
+  search: ["搜索设置", "搜索配置"],
+  web_fetch: ["网页抓取设置", "网页抓取配置"],
+  jina: ["Jina 设置", "Jina 配置"]
+}, w = "isthattrue-nav-style";
+function F() {
+  if (document.getElementById(w)) return;
   const t = document.createElement("style");
-  t.id = k, t.textContent = `
+  t.id = w, t.textContent = `
 .isthattrue-nav {
-  position: fixed;
-  top: 260px;
-  right: 60px;
+  position: absolute;
   z-index: 1000;
-  width: 140px;
+  width: 200px;
   max-width: 90vw;
+  max-height: 70vh;
+  background: var(--k-card-bg);
+  border-radius: 8px;
+  box-shadow: var(--k-card-shadow);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--k-card-border);
   user-select: none;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+}
+@media (max-width: 768px) {
+  .isthattrue-nav { width: 160px; max-height: 50vh; }
+}
+.isthattrue-nav:hover {
+  box-shadow: var(--k-card-shadow-hover, 0 4px 16px rgba(0,0,0,.15));
 }
 .isthattrue-nav-header {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--k-color-border, #4b5563);
-  background: color-mix(in srgb, var(--k-color-bg, #1f2937) 94%, white);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--k-color-divider, #ebeef5);
+  background-color: var(--k-hover-bg);
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   cursor: move;
-  touch-action: none;
+  transition: background-color 0.2s;
+}
+.isthattrue-nav-header:hover {
+  background-color: var(--k-activity-bg);
 }
 .isthattrue-nav-handle {
-  color: var(--k-text-light, #9ca3af);
-  font-size: 14px;
-  line-height: 1;
+  color: var(--k-text-light);
+  cursor: grab;
+  transition: color 0.2s;
+}
+.isthattrue-nav-handle:active {
+  cursor: grabbing;
+  color: var(--k-color-primary);
 }
 .isthattrue-nav-toggle {
   border: none;
   background: transparent;
-  color: var(--k-text-light, #9ca3af);
+  color: var(--k-text-light);
   cursor: pointer;
   padding: 0;
   font-size: 14px;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  transition: transform 0.3s ease, color 0.2s;
+}
+.isthattrue-nav-toggle:hover {
+  color: var(--k-text-active);
 }
 .isthattrue-nav-body {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  overflow-y: auto;
+  padding: 4px 0;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  opacity: 1;
 }
+.isthattrue-nav-body::-webkit-scrollbar { width: 6px; }
+.isthattrue-nav-body::-webkit-scrollbar-thumb { background: var(--k-scroll-thumb); border-radius: 3px; }
+.isthattrue-nav-body::-webkit-scrollbar-track { background: transparent; }
 .isthattrue-nav.collapsed .isthattrue-nav-body {
-  display: none;
+  max-height: 0;
+  padding: 0;
+  opacity: 0;
+  overflow: hidden;
 }
-.isthattrue-nav-item {
-  border: none;
-  background: transparent;
-  color: var(--k-text, #d1d5db);
-  text-align: left;
-  padding: 6px 4px;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1.4;
+.isthattrue-nav.collapsed .isthattrue-nav-toggle {
+  transform: rotate(-90deg);
 }
-.isthattrue-nav-item:hover {
-  color: var(--k-color-primary, #4f7cff);
+.isthattrue-nav.collapsed .isthattrue-nav-header {
+  border-bottom: none;
 }
-.isthattrue-nav-item.active {
-  color: var(--k-color-primary, #4f7cff);
+.isthattrue-nav-section {
+  margin-bottom: 4px;
 }
-.isthattrue-nav-group {
-  margin-top: 4px;
-  padding: 6px 4px 2px;
+.isthattrue-nav-section-title {
+  padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--k-text-light, #9ca3af);
-  opacity: 0.9;
+  color: var(--k-text-light);
+  background-color: var(--k-bg-light);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.isthattrue-nav-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--k-text);
+  text-align: left;
+  padding: 5px 12px 5px 20px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+  transition: background-color 0.15s, color 0.15s;
+}
+.isthattrue-nav-item:hover {
+  background-color: var(--k-hover-bg);
+  color: var(--k-text-active);
+}
+.isthattrue-nav-item.active {
+  color: var(--k-color-primary);
+  background-color: var(--k-hover-bg);
 }
 /* Shrink nested sub-section headers inside intersect groups. */
 .k-schema-group .k-schema-group .k-schema-header {
@@ -108,78 +162,81 @@ function j() {
 }
 `, document.head.appendChild(t);
 }
-function h(t) {
+function p(t) {
   return t.replace(/\s+/g, "").trim();
 }
-function E() {
+function L() {
   return Array.from(document.querySelectorAll(
     ".k-schema-section-title, .k-schema-header, h2.k-schema-header"
   ));
 }
-function B(t) {
-  const e = [t.title, ...C[t.key] || []].map((i) => h(i)).filter(Boolean), r = E();
+function q(t) {
+  const e = [t.title, ...E[t.key] || []].map((i) => p(i)).filter(Boolean), r = L();
   for (const i of r) {
-    const o = h(i.textContent || "");
-    if (o && e.some((d) => o.includes(d)))
+    const n = p(i.textContent || "");
+    if (n && e.some((u) => n.includes(u)))
       return i;
   }
   return null;
 }
-function w(t) {
-  const e = h(t);
-  return O.find((r) => [r.title, ...C[r.key] || []].map((o) => h(o)).filter(Boolean).some((o) => e.includes(o)));
+function C(t) {
+  const e = p(t);
+  return B.find((r) => [r.title, ...E[r.key] || []].map((n) => p(n)).filter(Boolean).some((n) => e.includes(n)));
 }
-function q() {
-  j();
+function j() {
+  F();
   const t = document.querySelector(".isthattrue-nav");
   t == null || t.remove();
   const e = document.createElement("div");
   e.className = "isthattrue-nav", e.innerHTML = `
 <div class="isthattrue-nav-header">
   <span class="isthattrue-nav-handle">⋮⋮</span>
-  <button class="isthattrue-nav-toggle" type="button">⌄</button>
+  <button class="isthattrue-nav-toggle" type="button">−</button>
 </div>
 <div class="isthattrue-nav-body"></div>
-`, document.body.appendChild(e);
-  const r = e.querySelector(".isthattrue-nav-body"), i = e.querySelector(".isthattrue-nav-toggle"), o = e.querySelector(".isthattrue-nav-header"), d = /* @__PURE__ */ new Map();
-  for (const n of S) {
+`, document.body.appendChild(e), e.style.top = "260px", e.style.right = "60px";
+  const r = e.querySelector(".isthattrue-nav-body"), i = e.querySelector(".isthattrue-nav-toggle"), n = e.querySelector(".isthattrue-nav-header"), u = /* @__PURE__ */ new Map();
+  for (const o of S) {
     const a = document.createElement("div");
-    a.className = "isthattrue-nav-group", a.textContent = n.title, r.appendChild(a);
-    for (const s of n.sections) {
-      const c = document.createElement("button");
-      c.type = "button", c.className = "isthattrue-nav-item", c.textContent = s.title, c.addEventListener("click", () => {
-        const u = B(s);
-        u && u.scrollIntoView({ behavior: "smooth", block: "start" });
-      }), r.appendChild(c), d.set(s.key, c);
+    a.className = "isthattrue-nav-section";
+    const s = document.createElement("div");
+    s.className = "isthattrue-nav-section-title", s.textContent = o.title, a.appendChild(s);
+    for (const d of o.sections) {
+      const l = document.createElement("button");
+      l.type = "button", l.className = "isthattrue-nav-item", l.textContent = d.title, l.addEventListener("click", () => {
+        const h = q(d);
+        h && h.scrollIntoView({ behavior: "smooth", block: "start" });
+      }), a.appendChild(l), u.set(d.key, l);
     }
+    r.appendChild(a);
   }
-  i.addEventListener("click", (n) => {
-    n.stopPropagation();
+  i.addEventListener("click", (o) => {
+    o.stopPropagation();
     const a = e.classList.toggle("collapsed");
-    i.textContent = a ? "⌃" : "⌄";
+    i.textContent = a ? "+" : "−";
   });
-  let p = 0, m = 0, f = 0, g = 0;
-  o.addEventListener("pointerdown", (n) => {
-    n.target.closest(".isthattrue-nav-toggle") || (n.preventDefault(), o.setPointerCapture(n.pointerId), p = n.clientX, m = n.clientY, f = parseFloat(e.style.right || "60"), g = parseFloat(e.style.top || "260"));
-  }), o.addEventListener("pointermove", (n) => {
-    if (!o.hasPointerCapture(n.pointerId)) return;
-    const a = n.clientX - p, s = n.clientY - m;
-    e.style.top = `${Math.max(0, g + s)}px`, e.style.right = `${Math.max(0, f - a)}px`;
+  let v = 0, g = 0, m = 0, b = 0;
+  n.addEventListener("pointerdown", (o) => {
+    o.target.closest(".isthattrue-nav-toggle") || (o.preventDefault(), n.setPointerCapture(o.pointerId), v = o.clientX, g = o.clientY, m = parseFloat(e.style.right || "60"), b = parseFloat(e.style.top || "260"));
+  }), n.addEventListener("pointermove", (o) => {
+    if (!n.hasPointerCapture(o.pointerId)) return;
+    const a = o.clientX - v, s = o.clientY - g;
+    e.style.top = `${Math.max(0, b + s)}px`, e.style.right = `${Math.max(0, m - a)}px`;
   });
-  const v = (n) => {
-    o.hasPointerCapture(n.pointerId) && o.releasePointerCapture(n.pointerId);
+  const f = (o) => {
+    n.hasPointerCapture(o.pointerId) && n.releasePointerCapture(o.pointerId);
   };
-  o.addEventListener("pointerup", v), o.addEventListener("pointercancel", v);
-  let l = null;
+  n.addEventListener("pointerup", f), n.addEventListener("pointercancel", f);
+  let c = null;
   const x = () => {
-    l == null || l.disconnect(), l = new IntersectionObserver((a) => {
+    c == null || c.disconnect(), c = new IntersectionObserver((a) => {
       var s;
-      for (const c of a) {
-        if (!c.isIntersecting) continue;
-        const u = (c.target.textContent || "").trim(), b = w(u);
-        if (b) {
-          for (const L of d.values()) L.classList.remove("active");
-          (s = d.get(b.key)) == null || s.classList.add("active");
+      for (const d of a) {
+        if (!d.isIntersecting) continue;
+        const l = (d.target.textContent || "").trim(), h = C(l);
+        if (h) {
+          for (const I of u.values()) I.classList.remove("active");
+          (s = u.get(h.key)) == null || s.classList.add("active");
           break;
         }
       }
@@ -188,38 +245,38 @@ function q() {
       rootMargin: "-20% 0px -60% 0px",
       threshold: 0
     });
-    const n = E();
-    for (const a of n) {
+    const o = L();
+    for (const a of o) {
       const s = a.textContent || "";
-      w(s) && l.observe(a);
+      C(s) && c.observe(a);
     }
-  }, y = new MutationObserver(() => {
+  }, k = new MutationObserver(() => {
     window.setTimeout(x, 200);
   });
-  return y.observe(document.body, { childList: !0, subtree: !0 }), window.setTimeout(x, 300), () => {
-    l == null || l.disconnect(), y.disconnect(), e.remove();
+  return k.observe(document.body, { childList: !0, subtree: !0 }), window.setTimeout(x, 300), () => {
+    c == null || c.disconnect(), k.disconnect(), e.remove();
   };
 }
-const F = I({
+const D = N({
   name: "FactCheckDetailsLoader",
   setup() {
     const t = T("plugin:name"), e = M(() => {
-      const o = t == null ? void 0 : t.value;
-      return !!o && P.has(o);
+      const n = t == null ? void 0 : t.value;
+      return O(n);
     });
     let r = null;
     const i = () => {
-      r == null || r(), r = null, e.value && (r = q());
+      r == null || r(), r = null, e.value && (r = j());
     };
-    return N(i), _(e, i), z(() => r == null ? void 0 : r()), () => A("div", { style: { display: "none" } });
+    return P(i), A(e, i), _(() => r == null ? void 0 : r()), () => z("div", { style: { display: "none" } });
   }
-}), Y = (t) => {
+}), H = (t) => {
   t.slot({
     type: "plugin-details",
-    component: F,
+    component: D,
     order: -999
   });
 };
 export {
-  Y as default
+  H as default
 };
