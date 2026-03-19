@@ -241,15 +241,19 @@ class FactCheckTool extends StructuredTool<any> {
       active.delete(outcome.index)
 
       if (outcome.status === 'fulfilled') {
+        this.logger.info(`[FactCheckTool] 来源 #${outcome.index + 1} 完成: perspective=${outcome.value.perspective}, failed=${outcome.value.failed}, findings=${String(outcome.value.findings || '').slice(0, 80)}`)
         if (outcome.value.failed) {
           failedLabels.push(outcome.value.perspective || `source-${outcome.index + 1}`)
         } else {
           successResults.push(outcome.value)
         }
       } else {
+        this.logger.warn(`[FactCheckTool] 来源 #${outcome.index + 1} rejected: ${this.getSourcePerspective(outcome.source, outcome.index)}`)
         failedLabels.push(this.getSourcePerspective(outcome.source, outcome.index))
       }
     }
+
+    this.logger.info(`[FactCheckTool] 循环结束: active=${active.size}, success=${successResults.length}, failed=${failedLabels.length}`)
 
     if (active.size > 0) {
       active.forEach((task, index) => {
