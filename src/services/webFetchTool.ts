@@ -60,7 +60,7 @@ class WebFetchTool extends StructuredTool<any> {
       return `[web_fetch]\nURL 非法或不安全: ${rawUrl}`
     }
 
-    const providerOrder = this.config.tools.webFetchProviderOrder || 'grok-first'
+    const providerOrder = this.config.web_fetch.providerOrder || 'grok-first'
     const tryGrokFirst = providerOrder !== 'jina-first'
 
     if (tryGrokFirst) {
@@ -89,11 +89,20 @@ class WebFetchTool extends StructuredTool<any> {
   }
 
   private truncateOutput(content: string): string {
-    return truncate(content, this.config.tools.webFetchMaxContentChars || 8000, '无有效内容')
+    return truncate(content, this.config.web_fetch.maxContentChars || 8000, '无有效内容')
+  }
+
+  private resolveChatlunaSearchModel(): string {
+    for (const source of this.config.search.sources || []) {
+      if (source.type !== 'chatluna_model') continue
+      const model = normalizeModelName(source.model)
+      if (model) return model
+    }
+    return ''
   }
 
   private async fetchWithGrok(url: string): Promise<string | null> {
-    const model = normalizeModelName(this.config.models.grokModel)
+    const model = this.resolveChatlunaSearchModel()
     if (!model) {
       return null
     }
@@ -104,8 +113,7 @@ class WebFetchTool extends StructuredTool<any> {
           model,
           message: `Read the following URL and extract its full text content. Return ONLY the extracted text, no commentary or formatting. URL: ${url}`,
           enableSearch: true,
-        },
-        this.config.debug.maxRetries
+        }
       )
       const content = (response.content || '').trim()
       return content || null
@@ -128,7 +136,7 @@ class WebFetchTool extends StructuredTool<any> {
 export function registerWebFetchTool(ctx: Ctx, config: PluginConfig): void {
   const logger = ctx.logger('chatluna-fact-check')
 
-  if (!config.tools.webFetchEnable) {
+  if (!config.web_fetch.enabled) {
     logger.info('[WebFetchTool] 已禁用工具注册')
     return
   }
@@ -139,9 +147,9 @@ export function registerWebFetchTool(ctx: Ctx, config: PluginConfig): void {
     return
   }
 
-  const toolName = sanitizeToolName(config.tools.webFetchToolName, 'web_fetch')
+  const toolName = sanitizeToolName(config.web_fetch.name, 'web_fetch')
   const toolDescription = sanitizeToolDescription(
-    config.tools.webFetchToolDescription,
+    config.web_fetch.description,
     '用于获取指定 URL 的网页内容。输入 URL，返回提取后的正文文本。'
   )
 

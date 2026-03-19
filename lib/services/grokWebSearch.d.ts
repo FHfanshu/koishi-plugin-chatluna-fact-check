@@ -11,6 +11,7 @@ export declare class GrokWebSearchService {
     private readonly logger;
     private readonly chatluna;
     constructor(ctx: Ctx, config: PluginConfig);
+    private resolveChatlunaSearchModel;
     search(query: string, maxResults?: number): Promise<GrokSearchResult[]>;
     private parseJson;
     private validateResults;

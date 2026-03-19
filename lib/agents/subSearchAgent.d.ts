@@ -6,10 +6,9 @@ export declare class SubSearchAgent {
     private readonly chatluna;
     private readonly logger;
     constructor(ctx: Ctx, config: PluginConfig);
-    deepSearch(claim: string): Promise<AgentSearchResult>;
-    deepSearchWithModel(claim: string, modelName: string, agentId?: string, perspective?: string, promptOverride?: string, systemPromptOverride?: string): Promise<AgentSearchResult>;
+    deepSearchWithModel(claim: string, modelName: string, agentId?: string, perspective?: string, promptOverride?: string, systemPromptOverride?: string, allowFallback?: boolean): Promise<AgentSearchResult>;
     private shouldFallbackToFastModel;
-    private normalizeDeepSearchGrokModel;
+    private resolveFallbackModel;
     private parseResponse;
 }
 export {};

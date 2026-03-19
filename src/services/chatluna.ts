@@ -58,7 +58,7 @@ export class ChatlunaAdapter {
       messages.push(new HumanMessage(messageContent))
     }
 
-    if (this.config.debug.logLLMDetails) {
+    if (this.config.debug) {
       this.logger.info(
         `[LLM Request] Model: ${request.model}\nSystem: ${request.systemPrompt || 'None'}\nMessage: ${typeof messageContent === 'string' ? messageContent.substring(0, 500) : 'Complex content'}`
       )
@@ -76,7 +76,7 @@ export class ChatlunaAdapter {
       ? response.content
       : JSON.stringify(response.content)
 
-    if (this.config.debug.logLLMDetails) {
+    if (this.config.debug) {
       this.logger.info(`[LLM Response] Model: ${request.model}\nContent: ${content}`)
     }
 

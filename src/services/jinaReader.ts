@@ -1,6 +1,5 @@
 import type { PluginConfig } from '../types'
 import { isSafePublicHttpUrl } from '../utils/url'
-import { resolveProxyAgent } from '../utils/http'
 
 export interface JinaReaderResult {
   url: string
@@ -25,11 +24,10 @@ export class JinaReaderService {
       return null
     }
 
-    const timeout = (this.config.services.jinaTimeout || 30) * 1000
-    const proxyAgent = resolveProxyAgent(this.config.debug)
+    const timeout = (this.config.jina.timeout || 30) * 1000
 
     // First attempt with API key (if configured)
-    const apiKey = this.config.services.jinaApiKey?.trim()
+    const apiKey = this.config.jina.apiKey?.trim()
     const headers: Record<string, string> = {
       'Accept': 'application/json',
       'X-Timeout': '25', // seconds, slightly less than our own timeout
@@ -40,7 +38,7 @@ export class JinaReaderService {
     }
 
     try {
-      const result = await this._fetchWithRetry(targetUrl, timeout, headers, proxyAgent)
+      const result = await this._fetchWithRetry(targetUrl, timeout, headers)
       return result
     } catch (error) {
       const statusCode = (error as any)?.response?.status
@@ -52,7 +50,7 @@ export class JinaReaderService {
         )
         delete headers['Authorization']
         try {
-          return await this._fetchWithRetry(targetUrl, timeout, headers, proxyAgent)
+          return await this._fetchWithRetry(targetUrl, timeout, headers)
         } catch (retryError) {
           this.logger.warn(`jina reader: failed without key: ${String(retryError)}`)
           return null
@@ -64,7 +62,7 @@ export class JinaReaderService {
         this.logger.warn('jina reader: rate limited (429), retrying after 2s')
         await this._sleep(2000)
         try {
-          return await this._fetchWithRetry(targetUrl, timeout, headers, proxyAgent)
+          return await this._fetchWithRetry(targetUrl, timeout, headers)
         } catch (retryError) {
           this.logger.warn(`jina reader: failed after 429 retry: ${String(retryError)}`)
           return null
@@ -81,14 +79,12 @@ export class JinaReaderService {
     targetUrl: string,
     timeout: number,
     headers: Record<string, string>,
-    proxyAgent: string | undefined,
   ): Promise<JinaReaderResult | null> {
     const apiUrl = `https://r.jina.ai/${encodeURIComponent(targetUrl)}`
 
     const response = await this.ctx.http.get(apiUrl, {
       timeout,
       headers,
-      ...(proxyAgent !== undefined ? { proxyAgent } : {}),
     })
 
     // Parse Jina response: {"code": 200, "status": 20000, "data": {"url": "...", "title": "...", "content": "..."}}

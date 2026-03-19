@@ -2,7 +2,7 @@ import { Context } from '@koishijs/client'
 import { computed, defineComponent, inject, onBeforeUnmount, onMounted, type ComputedRef, watch, h } from 'vue'
 
 type NavSection = {
-  key: 'tools' | 'models' | 'search' | 'services' | 'debug'
+  key: 'base' | 'tool' | 'search' | 'web_fetch' | 'jina'
   title: string
 }
 
@@ -20,34 +20,29 @@ const PLUGIN_NAMES = new Set([
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    title: '工具与模型',
+    title: '基础与工具',
     sections: [
-      { key: 'tools', title: '工具注册' },
-      { key: 'models', title: 'LLM AI 接入' },
+      { key: 'base', title: '基础' },
+      { key: 'tool', title: 'tool' },
     ],
   },
   {
-    title: '搜索与服务',
+    title: '搜索与抓取',
     sections: [
-      { key: 'search', title: '搜索策略' },
-      { key: 'services', title: '外部服务' },
-    ],
-  },
-  {
-    title: '调试/兼容',
-    sections: [
-      { key: 'debug', title: '调试与排障' },
+      { key: 'search', title: 'search' },
+      { key: 'web_fetch', title: 'web_fetch' },
+      { key: 'jina', title: 'jina' },
     ],
   },
 ] 
 
 const NAV_SECTIONS: NavSection[] = NAV_GROUPS.flatMap((group) => group.sections)
 const SECTION_TITLE_ALIASES: Record<NavSection['key'], string[]> = {
-  tools: ['工具注册', 'Fact Check 工具', 'Deep Search 工具', 'Web Fetch 工具'],
-  models: ['LLM AI 接入', '模型接入', 'AI 模型接入'],
-  search: ['搜索策略', '搜索配置', '超时配置', '排序与策略', '最大字数'],
-  services: ['外部服务', 'Grok 网络搜索', 'Jina Reader 配置'],
-  debug: ['调试与排障', '调试'],
+  base: ['基础'],
+  tool: ['tool', '工具配置'],
+  search: ['search', '搜索配置'],
+  web_fetch: ['web_fetch', '网页抓取配置'],
+  jina: ['jina', 'Jina 配置'],
 }
 
 const STYLE_ID = 'isthattrue-nav-style'
@@ -124,7 +119,7 @@ function ensureStyle() {
   color: var(--k-text-light, #9ca3af);
   opacity: 0.9;
 }
-/* Shrink nested sub-section headers inside intersect groups (e.g. DeepSearch sub-sections) */
+/* Shrink nested sub-section headers inside intersect groups. */
 .k-schema-group .k-schema-group .k-schema-header {
   font-size: 0.85em;
   margin-top: 0.4em;

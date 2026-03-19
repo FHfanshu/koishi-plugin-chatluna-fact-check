@@ -2,31 +2,23 @@ import { StructuredTool } from '@langchain/core/tools'
 import { z } from 'zod'
 
 import { SubSearchAgent } from '../agents/subSearchAgent'
+import type { AgentSearchResult, PluginConfig, SourceConfig } from '../types'
+import { TavilySearchService } from './tavilySearch'
 import { withTimeout } from '../utils/async'
-import { buildFactCheckToolSearchPrompt, FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT } from '../utils/prompts'
 import { normalizeModelName } from '../utils/model'
+import { buildFactCheckToolSearchPrompt, FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT } from '../utils/prompts'
 import { maybeSummarize } from '../utils/summary'
 import { truncate } from '../utils/text'
 import { extractUrls } from '../utils/url'
 
-import type { AgentSearchResult, PluginConfig, ProviderKey } from '../types'
-
 type Ctx = any
 
-interface ToolProvider {
-  key: ProviderKey
-  label: string
-  model: string
-}
-
-type ProviderTaskOutcome =
-  | { index: number; provider: ToolProvider; status: 'fulfilled'; value: AgentSearchResult }
-  | { index: number; provider: ToolProvider; status: 'rejected'; reason: unknown }
+type SourceTaskOutcome =
+  | { index: number; source: SourceConfig; status: 'fulfilled'; value: AgentSearchResult }
+  | { index: number; source: SourceConfig; status: 'rejected'; reason: unknown }
   | { status: 'timeout' }
 
 class FactCheckTool extends StructuredTool<any> {
-  static HARD_TIMEOUT_MS = 600_000
-
   name: string
   description: string
   schema = z.object({
@@ -35,7 +27,8 @@ class FactCheckTool extends StructuredTool<any> {
 
   private readonly logger: any
   private readonly subSearchAgent: SubSearchAgent
-  private readonly backgroundTasks = new Set<Promise<ProviderTaskOutcome>>()
+  private readonly tavilySearch: TavilySearchService
+  private readonly backgroundTasks = new Set<Promise<SourceTaskOutcome>>()
 
   constructor(
     private readonly ctx: Ctx,
@@ -45,173 +38,10 @@ class FactCheckTool extends StructuredTool<any> {
   ) {
     super()
     this.name = sanitizeToolName(toolName, 'fact_check')
-    this.description = sanitizeToolDescription(toolDescription, '用于网络搜索与事实核查。输入待核查文本,返回来源与摘要。')
+    this.description = sanitizeToolDescription(toolDescription, '联网事实核查与时效搜索。')
     this.logger = ctx.logger('chatluna-fact-check')
     this.subSearchAgent = new SubSearchAgent(ctx, config)
-  }
-
-  private getQuickProvider(): ToolProvider | null {
-    const gemini = normalizeModelName(this.config.models.geminiModel)
-    if (!gemini) return null
-
-    return {
-      key: 'gemini',
-      label: 'GeminiWebSearch',
-      model: gemini,
-    }
-  }
-
-  private normalizeFastReturnMinSuccess(providerCount: number): number {
-    const configured = this.config.search.fastReturnMinSuccess ?? 2
-    return Math.max(1, Math.min(configured, providerCount))
-  }
-
-  private getFastReturnPreferredProvider(): ProviderKey | null {
-    const configured = this.config.search.fastReturnPreferredProvider
-    return configured === 'grok' || configured === 'gemini' ? configured : null
-  }
-
-  private buildInternalContextPreamble(): string {
-    return [
-      '[INTERNAL_TOOL_CONTEXT]',
-      'INTERNAL_TOOL_CONTEXT_DO_NOT_QUOTE_VERBATIM',
-      '以下内容仅用于 Agent 内部推理，不要逐字转发给用户。',
-      '对用户回复时请只输出结论、关键依据和必要来源链接。',
-      '',
-    ].join('\n')
-  }
-
-  private toShortLine(text: string | undefined, maxChars: number): string {
-    return truncate((text || '').replace(/\s+/g, ' ').trim(), maxChars, '无')
-  }
-
-  private formatFindingsForContext(text: string | undefined, maxChars: number): string {
-    const normalized = (text || '').trim()
-    if (!normalized) return '无'
-    return truncate(normalized, maxChars, '无')
-  }
-
-  private formatSourcesForContext(sources: string[], limit: number): string {
-    const items = (sources || []).filter(Boolean).slice(0, limit)
-    if (items.length === 0) return '- 无'
-    return items.map((s) => `- ${s}`).join('\n')
-  }
-
-  private appendDirectSourcesBlock(output: string, sources: string[]): string {
-    if (!this.config.tools.forceExposeSources) {
-      return output
-    }
-
-    const directSources = [...new Set(
-      (sources || [])
-        .flatMap((source) => extractUrls(String(source || '').trim()))
-        .filter(Boolean)
-    )].slice(0, this.config.tools.maxSources)
-    const sourceText = directSources.length > 0
-      ? directSources.map((source) => `- ${source}`).join('\n')
-      : '- 无'
-
-    return `${output}\n\n[DirectSendSources]\n以下原始链接为直接发送给用户用，不要改写、补全或重写。\n${sourceText}`
-  }
-
-  private createProviderTask(claim: string, provider: ToolProvider, index: number): Promise<ProviderTaskOutcome> {
-    return withTimeout(
-      this.subSearchAgent.deepSearchWithModel(
-        claim,
-        provider.model,
-        `tool-${provider.key}`,
-        provider.label,
-        buildFactCheckToolSearchPrompt(claim),
-        FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT
-      ),
-      this.config.search.perSourceTimeout * 1000,
-      provider.label
-    )
-      .then((value) => ({ index, provider, status: 'fulfilled' as const, value }))
-      .catch((reason) => ({ index, provider, status: 'rejected', reason }))
-  }
-
-  private trackBackgroundTask(task: Promise<ProviderTaskOutcome>, label: string): void {
-    this.backgroundTasks.add(task)
-    task.then(() => {
-      this.logger.info(`[ChatlunaTool] 后台任务完成: ${label}`)
-    }).catch((error: any) => {
-      this.logger.info(`[ChatlunaTool] 后台任务失败: ${label}: ${error?.message || error}`)
-    }).finally(() => {
-      this.backgroundTasks.delete(task)
-    })
-  }
-
-  private async waitNextOutcome(
-    active: Map<number, Promise<ProviderTaskOutcome>>,
-    remainingMs: number
-  ): Promise<ProviderTaskOutcome> {
-    if (active.size === 0 || remainingMs <= 0) {
-      return { status: 'timeout' }
-    }
-
-    return Promise.race([
-      ...active.values(),
-      new Promise<ProviderTaskOutcome>((resolve) => {
-        setTimeout(() => resolve({ status: 'timeout' }), remainingMs)
-      }),
-    ])
-  }
-
-  private getToolProviders(): ToolProvider[] {
-    const providers: ToolProvider[] = []
-
-    const grokModel = normalizeModelName(this.config.models.grokModel)
-    if (grokModel) providers.push({ key: 'grok', label: 'GrokSearch', model: grokModel })
-
-    const geminiModel = normalizeModelName(this.config.models.geminiModel)
-    if (geminiModel) providers.push({ key: 'gemini', label: 'GeminiSearch', model: geminiModel })
-
-    return providers
-  }
-
-  private formatSingleResult(result: AgentSearchResult): string {
-    const findings = this.formatFindingsForContext(result.findings, this.config.search.maxFindingsChars)
-    const confidence = Number.isFinite(result.confidence)
-      ? `${Math.round(result.confidence * 100)}%`
-      : '未知'
-
-    const sourceText = this.formatSourcesForContext(result.sources, this.config.tools.maxSources)
-
-    const output = `${this.buildInternalContextPreamble()}[FactCheckContext]
-模式: single-source
-视角: ${result.perspective}
-置信度: ${confidence}
-关键发现: ${findings}
-
-[Sources]
-${sourceText}`
-
-    return this.appendDirectSourcesBlock(output, result.sources)
-  }
-
-  private formatMultiResults(results: AgentSearchResult[]): string {
-    const parts: string[] = [this.buildInternalContextPreamble(), '[FactCheckContext]', '模式: multi-source']
-    const allSources = new Set<string>()
-
-    for (const result of results) {
-      const confidence = Number.isFinite(result.confidence)
-        ? `${Math.round(result.confidence * 100)}%`
-        : '未知'
-
-      parts.push(`- 视角: ${result.perspective}`)
-      parts.push(`  置信度: ${confidence}`)
-      parts.push(`  关键发现: ${this.formatFindingsForContext(result.findings, this.config.search.maxFindingsChars)}`)
-
-      for (const source of result.sources) {
-        if (source) allSources.add(source)
-      }
-    }
-
-    const dedupedSources = [...allSources].slice(0, this.config.tools.maxSources)
-    parts.push('[Sources]')
-    parts.push(this.formatSourcesForContext(dedupedSources, this.config.tools.maxSources))
-    return this.appendDirectSourcesBlock(parts.join('\n'), dedupedSources)
+    this.tavilySearch = new TavilySearchService(ctx, config)
   }
 
   private unwrapInput(input: unknown): string {
@@ -225,242 +55,248 @@ ${sourceText}`
     return ''
   }
 
-  async _call(input: { input: string } | string): Promise<string> {
-    const rawClaim = this.unwrapInput(input).trim()
-    if (!rawClaim) {
-      return '[GrokSearch]\n输入为空，请提供需要检索的文本。'
-    }
-
-    try {
-      return await withTimeout(this._callInner(rawClaim), this.getHardTimeoutMs(), 'FactCheck 整体')
-    } catch (error: any) {
-      this.logger.error('[ChatlunaTool] 核查失败（可能超时）:', error)
-      return `[FactCheck]\n搜索失败: ${error?.message || error}`
-    }
-  }
-
-  private getHardTimeoutMs(): number {
-    const perSourceTimeoutMs = this.config.search.perSourceTimeout * 1000
-    const providerCount = this.config.search.enableMultiSourceSearch
-      ? this.getToolProviders().length
-      : (this.getQuickProvider() ? 1 : 0)
-
-    const estimated = Math.max(60_000, perSourceTimeoutMs * Math.max(1, providerCount) + 30_000)
-    return Math.min(Math.max(estimated, 120_000), FactCheckTool.HARD_TIMEOUT_MS)
-  }
-
-  private async _callInner(rawClaim: string): Promise<string> {
-    const limit = this.config.tools.maxInputChars
-    const claim = rawClaim.substring(0, limit)
-
-    if (rawClaim.length > limit) {
-      this.logger.warn(`[ChatlunaTool] 输入过长，已截断到 ${limit} 字符`)
-    }
-
-    try {
-      this.logger.info('[ChatlunaTool] 收到事实核查请求')
-
-      const providers = this.config.search.enableMultiSourceSearch
-        ? this.getToolProviders()
-        : (() => {
-            const provider = this.getQuickProvider()
-            return provider ? [provider] : []
-          })()
-
-      this.logger.info(`[ChatlunaTool] providers=${providers.map((p) => `${p.key}:${p.model}`).join(', ') || 'none'}`)
-
-      if (providers.length === 0) {
-        return '[FactCheck]\n搜索失败: 未配置可用搜索来源。请配置 models.grokModel / models.geminiModel。'
+  private getConfiguredSources(): SourceConfig[] {
+    return (this.config.search.sources || []).filter((source) => {
+      if (source.type === 'chatluna_model') {
+        return Boolean(normalizeModelName(source.model))
       }
+      if (source.type === 'tavily') {
+        return Boolean((source.tavilyApiKey || '').trim())
+      }
+      return false
+    })
+  }
 
-      if (!this.config.search.enableMultiSourceSearch || providers.length === 1) {
-        const provider = providers[0]
-
-        const result = await withTimeout(
-          this.subSearchAgent.deepSearchWithModel(
-            claim,
-            provider.model,
-            `tool-${provider.key}`,
-            provider.label,
-            buildFactCheckToolSearchPrompt(claim),
-            FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT
-          ),
-          this.config.search.perSourceTimeout * 1000,
-          provider.label
+  private createSourceTask(claim: string, source: SourceConfig, index: number): Promise<SourceTaskOutcome> {
+    const task = source.type === 'chatluna_model'
+      ? this.subSearchAgent.deepSearchWithModel(
+          claim,
+          normalizeModelName(source.model),
+          `fact-check-${index + 1}`,
+          source.label || `ChatlunaSearch-${index + 1}`,
+          buildFactCheckToolSearchPrompt(claim),
+          FACT_CHECK_TOOL_SEARCH_SYSTEM_PROMPT
+        )
+      : this.tavilySearch.search(
+          claim,
+          source.tavilyApiKey,
+          source.label || `TavilySearch-${index + 1}`
         )
 
-        if (result.failed) {
-          return `[${provider.label}]\n搜索失败: ${result.error || result.findings}`
-        }
+    return withTimeout(
+      task,
+      Math.max(5, this.config.search.perSourceTimeout || 45) * 1000,
+      source.type === 'chatluna_model' ? `chatluna:${source.label}` : `tavily:${source.label}`
+    )
+      .then((value) => ({ index, source, status: 'fulfilled' as const, value }))
+      .catch((reason) => ({ index, source, status: 'rejected' as const, reason }))
+  }
 
-        return this.summarizeOutput(this.formatSingleResult(result), 'fact_check(single)')
-      }
+  private trackBackgroundTask(task: Promise<SourceTaskOutcome>, label: string): void {
+    this.backgroundTasks.add(task)
+    task.then(() => {
+      this.logger.info(`[FactCheckTool] 后台任务完成: ${label}`)
+    }).catch((error: any) => {
+      this.logger.info(`[FactCheckTool] 后台任务失败: ${label}: ${error?.message || error}`)
+    }).finally(() => {
+      this.backgroundTasks.delete(task)
+    })
+  }
 
-      const successResults: AgentSearchResult[] = []
-      const failedLabels: string[] = []
-      const start = Date.now()
-
-      const minSuccess = this.normalizeFastReturnMinSuccess(providers.length)
-      const preferredProvider = this.getFastReturnPreferredProvider()
-      const shouldWaitPreferred = !!preferredProvider && providers.some((p) => p.key === preferredProvider)
-      let preferredProviderSucceeded = false
-      const maxWaitMs = Math.max(
-        1000,
-        Math.min((this.config.search.fastReturnMaxWait ?? 12) * 1000, this.config.search.perSourceTimeout * 1000)
-      )
-
-      const targetConcurrency = minSuccess
-      const active = new Map<number, Promise<ProviderTaskOutcome>>()
-      let nextProviderIndex = 0
-
-      const launchNext = (): boolean => {
-        if (nextProviderIndex >= providers.length) return false
-
-        const index = nextProviderIndex
-        const provider = providers[index]
-        nextProviderIndex += 1
-        active.set(index, this.createProviderTask(claim, provider, index))
-        return true
-      }
-
-      while (active.size < targetConcurrency && launchNext()) {
-        // warm-up
-      }
-
-      while (active.size > 0) {
-        const remainingMs = maxWaitMs - (Date.now() - start)
-        const outcome = await this.waitNextOutcome(active, remainingMs)
-
-        if (outcome.status === 'timeout') {
-          this.logger.info(`[ChatlunaTool] 达到快速返回等待上限 ${maxWaitMs}ms，提前返回`)
-          break
-        }
-
-        active.delete(outcome.index)
-
-        if (outcome.status === 'fulfilled') {
-          if (outcome.value?.failed) {
-            failedLabels.push(outcome.provider.label)
-            this.logger.warn(`[ChatlunaTool] ${outcome.provider.label} 失败: ${outcome.value.error || outcome.value.findings}`)
-          } else if (outcome.value) {
-            successResults.push(outcome.value)
-            if (shouldWaitPreferred && outcome.provider.key === preferredProvider) {
-              preferredProviderSucceeded = true
-              this.logger.info(`[ChatlunaTool] 优先来源 ${outcome.provider.label} 已成功，提前返回`)
-              break
-            }
-          }
-        } else {
-          failedLabels.push(outcome.provider.label)
-          this.logger.warn(`[ChatlunaTool] ${outcome.provider.label} 失败: ${(outcome.reason as any)?.message || outcome.reason}`)
-        }
-
-        const elapsed = Date.now() - start
-        if (successResults.length >= minSuccess) {
-          if (shouldWaitPreferred && !preferredProviderSucceeded) {
-            this.logger.info(
-              `[ChatlunaTool] 已获得 ${successResults.length} 个成功来源，但仍等待优先来源 ${preferredProvider}`
-            )
-          } else {
-          this.logger.info(`[ChatlunaTool] 已获得 ${successResults.length} 个成功来源，提前返回`)
-          break
-          }
-        }
-
-        if (elapsed < maxWaitMs) {
-          while (active.size < targetConcurrency && launchNext()) {
-            // fill slots
-          }
-        }
-      }
-
-      if (active.size > 0) {
-        active.forEach((task, index) => {
-          const provider = providers[index]
-          this.trackBackgroundTask(task, provider?.label || `provider-${index}`)
-        })
-      }
-
-      if (successResults.length === 0) {
-        return `[MultiSourceSearch]\n搜索失败: ${failedLabels.join('、') || '全部来源不可用'}`
-      }
-
-      const output = this.formatMultiResults(successResults)
-      if (failedLabels.length > 0) {
-        return this.summarizeOutput(`${output}\n\n[Failed]\n- ${failedLabels.join('\n- ')}`, 'fact_check(multi)')
-      }
-
-      return this.summarizeOutput(output, 'fact_check(multi)')
-    } catch (error: any) {
-      this.logger.error('[ChatlunaTool] 核查失败:', error)
-      return `[MultiSourceSearch]\n搜索失败: ${error?.message || error}`
+  private async waitNextOutcome(
+    active: Map<number, Promise<SourceTaskOutcome>>,
+    remainingMs: number
+  ): Promise<SourceTaskOutcome> {
+    if (active.size === 0 || remainingMs <= 0) {
+      return { status: 'timeout' }
     }
+
+    return Promise.race([
+      ...active.values(),
+      new Promise<SourceTaskOutcome>((resolve) => {
+        setTimeout(() => resolve({ status: 'timeout' }), remainingMs)
+      }),
+    ])
+  }
+
+  private buildInternalContextPreamble(): string {
+    return [
+      '[INTERNAL_TOOL_CONTEXT]',
+      'INTERNAL_TOOL_CONTEXT_DO_NOT_QUOTE_VERBATIM',
+      '以下内容仅用于 Agent 内部推理，不要逐字转发给用户。',
+      '对用户回复时请只输出结论、关键依据和必要来源链接。',
+      '',
+    ].join('\n')
+  }
+
+  private formatFindingsForContext(text: string | undefined, maxChars: number): string {
+    const normalized = (text || '').trim()
+    if (!normalized) return '无'
+    return truncate(normalized, maxChars, '无')
+  }
+
+  private formatSourcesForContext(sources: string[], limit: number): string {
+    const items = (sources || []).filter(Boolean).slice(0, limit)
+    if (items.length === 0) return '- 无'
+    return items.map((item) => `- ${item}`).join('\n')
+  }
+
+  private appendDirectSourcesBlock(output: string, sources: string[]): string {
+    if (!this.config.tool.forceExposeSources) {
+      return output
+    }
+
+    const directSources = [...new Set(
+      (sources || [])
+        .flatMap((source) => extractUrls(String(source || '').trim()))
+        .filter(Boolean)
+    )].slice(0, this.config.tool.maxSources)
+
+    const sourceText = directSources.length > 0
+      ? directSources.map((source) => `- ${source}`).join('\n')
+      : '- 无'
+
+    return `${output}\n\n[DirectSendSources]\n以下原始链接为直接发送给用户用，不要改写、补全或重写。\n${sourceText}`
+  }
+
+  private formatResults(results: AgentSearchResult[]): string {
+    const lines: string[] = [this.buildInternalContextPreamble(), '[FactCheckContext]', '模式: multi-source']
+    const allSources: string[] = []
+    const maxFindingsChars = this.config.search.maxFindingsChars || 3000
+
+    results.forEach((result, index) => {
+      const confidence = Number.isFinite(result.confidence)
+        ? `${Math.round(result.confidence * 100)}%`
+        : '未知'
+
+      lines.push('')
+      lines.push(`[Source ${index + 1}]`)
+      lines.push(`来源: ${result.perspective}`)
+      lines.push(`置信度: ${confidence}`)
+      lines.push(`关键发现: ${this.formatFindingsForContext(result.findings, maxFindingsChars)}`)
+      lines.push('[Sources]')
+      lines.push(this.formatSourcesForContext(result.sources || [], this.config.tool.maxSources))
+
+      allSources.push(...(result.sources || []))
+    })
+
+    return this.appendDirectSourcesBlock(lines.join('\n'), allSources)
   }
 
   private async summarizeOutput(output: string, label: string): Promise<string> {
-    return maybeSummarize(this.ctx, this.config, output, label)
+    const summaryEnabled = ['1', 'true', 'on'].includes(
+      String(process.env.CHATLUNA_FACT_CHECK_ENABLE_SUMMARY || '').toLowerCase()
+    )
+    return maybeSummarize(this.ctx, this.config, output, label, {
+      enabled: summaryEnabled,
+      maxChars: this.config.search.maxFindingsChars,
+    })
   }
 
-  static setHardTimeout(_ms: number): void {
-    // reserved
+  async _call(input: { input: string } | string): Promise<string> {
+    const rawClaim = this.unwrapInput(input).trim()
+    if (!rawClaim) {
+      return '[FactCheck]\n输入为空，请提供需要检索的文本。'
+    }
+
+    const maxInputChars = this.config.tool.maxInputChars || 1_200
+    const claim = rawClaim.slice(0, maxInputChars)
+    if (rawClaim.length > maxInputChars) {
+      this.logger.warn(`[FactCheckTool] 输入过长，已截断到 ${maxInputChars} 字符`)
+    }
+
+    const configuredSources = this.getConfiguredSources()
+    if (configuredSources.length === 0) {
+      return '[FactCheck]\n搜索失败: 未配置搜索来源。'
+    }
+
+    const failedLabels: string[] = []
+    const successResults: AgentSearchResult[] = []
+    const active = new Map<number, Promise<SourceTaskOutcome>>()
+    const start = Date.now()
+    const maxWaitMs = Math.max(1, this.config.timeoutSeconds || 120) * 1000
+
+    configuredSources.forEach((source, index) => {
+      active.set(index, this.createSourceTask(claim, source, index))
+    })
+
+    while (active.size > 0) {
+      const remainingMs = maxWaitMs - (Date.now() - start)
+      const outcome = await this.waitNextOutcome(active, remainingMs)
+
+      if (outcome.status === 'timeout') {
+        this.logger.info(`[FactCheckTool] 达到快速返回等待上限 ${maxWaitMs}ms`)
+        break
+      }
+
+      active.delete(outcome.index)
+
+      if (outcome.status === 'fulfilled') {
+        if (outcome.value.failed) {
+          failedLabels.push(outcome.value.perspective || `source-${outcome.index + 1}`)
+        } else {
+          successResults.push(outcome.value)
+          if (successResults.length >= 1) {
+            break
+          }
+        }
+      } else {
+        const label = outcome.source.label || `source-${outcome.index + 1}`
+        failedLabels.push(label)
+      }
+    }
+
+    if (active.size > 0) {
+      active.forEach((task, index) => {
+        const source = configuredSources[index]
+        this.trackBackgroundTask(task, source?.label || `source-${index + 1}`)
+      })
+    }
+
+    if (successResults.length === 0) {
+      return `[FactCheck]\n搜索失败: ${failedLabels.join('、') || '全部来源不可用'}`
+    }
+
+    const output = this.formatResults(successResults)
+    if (failedLabels.length > 0) {
+      return this.summarizeOutput(`${output}\n\n[Failed]\n- ${failedLabels.join('\n- ')}`, 'fact_check')
+    }
+    return this.summarizeOutput(output, 'fact_check')
   }
 }
 
 export function registerFactCheckTool(ctx: Ctx, config: PluginConfig): void {
   const logger = ctx.logger('chatluna-fact-check')
 
-  if (!config.tools.factCheckEnable) {
-    logger.info('[ChatlunaTool] 已禁用工具注册')
+  if (!config.tool.enabled) {
+    logger.info('[FactCheckTool] 已禁用工具注册')
     return
   }
 
   const chatluna = ctx.chatluna
   if (!chatluna?.platform?.registerTool) {
-    logger.warn('[ChatlunaTool] chatluna.platform.registerTool 不可用，跳过注册')
+    logger.warn('[FactCheckTool] chatluna.platform.registerTool 不可用，跳过注册')
     return
   }
 
-  const quickToolName = sanitizeToolName(config.tools.quickToolName, 'fact_check')
-  const quickToolDescription = sanitizeToolDescription(
-    config.tools.quickToolDescription,
-    '用于网络搜索与事实核查。输入待核查文本，返回来源与摘要。'
-  )
+  const toolName = sanitizeToolName(config.tool.name, 'fact_check')
+  const toolDescription = sanitizeToolDescription(config.tool.description, '联网事实核查与时效搜索。')
 
   ctx.effect(() => {
-    const disposables: Array<() => void> = []
-
-    if (config.tools.enableQuickTool) {
-      logger.info(`[ChatlunaTool] 注册工具: ${quickToolName}`)
-
-      const disposeQuick = chatluna.platform.registerTool(quickToolName, {
-        createTool() {
-          const tool = new FactCheckTool(ctx, config, quickToolName, quickToolDescription)
-          const resolvedName = sanitizeToolName(tool.name, '')
-          if (!resolvedName) {
-            tool.name = 'fact_check'
-            logger.warn('[ChatlunaTool] 检测到空工具名，已回退为 fact_check')
-          }
-
-          tool.description = sanitizeToolDescription(
-            tool.description,
-            '用于网络搜索与事实核查。输入待核查文本，返回来源与摘要。'
-          )
-          return tool
-        },
-        selector() {
-          return true
-        },
-      })
-
-      if (typeof disposeQuick === 'function') {
-        disposables.push(disposeQuick)
-      }
-    } else {
-      logger.warn('[ChatlunaTool] tools.enableQuickTool=false，未注册 fact_check 工具')
-    }
+    logger.info(`[FactCheckTool] 注册工具: ${toolName}`)
+    const dispose = chatluna.platform.registerTool(toolName, {
+      createTool() {
+        return new FactCheckTool(ctx, config, toolName, toolDescription)
+      },
+      selector() {
+        return true
+      },
+    })
 
     return () => {
-      disposables.forEach((dispose) => dispose())
+      if (typeof dispose === 'function') {
+        dispose()
+      }
     }
   })
 }

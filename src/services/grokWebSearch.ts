@@ -20,6 +20,15 @@ export class GrokWebSearchService {
     this.chatluna = new ChatlunaAdapter(ctx, config)
   }
 
+  private resolveChatlunaSearchModel(): string {
+    for (const source of this.config.search.sources || []) {
+      if (source.type !== 'chatluna_model') continue
+      const model = normalizeModelName(source.model)
+      if (model) return model
+    }
+    return ''
+  }
+
   async search(query: string, maxResults = 5): Promise<GrokSearchResult[]> {
     const trimmedQuery = (query || '').trim()
     if (!trimmedQuery) {
@@ -27,9 +36,9 @@ export class GrokWebSearchService {
       return []
     }
 
-    const model = normalizeModelName(this.config.models.grokModel)
+    const model = this.resolveChatlunaSearchModel()
     if (!model) {
-      this.logger.warn('GrokWebSearch: models.grokModel 未配置，跳过 Grok 搜索')
+      this.logger.warn('GrokWebSearch: 未配置 chatluna_model 来源，跳过 Grok 搜索')
       return []
     }
 
@@ -43,8 +52,7 @@ export class GrokWebSearchService {
           message: userMessage,
           systemPrompt,
           enableSearch: true,
-        },
-        this.config.debug.maxRetries
+        }
       )
 
       const results = this.parseJson(response.content)

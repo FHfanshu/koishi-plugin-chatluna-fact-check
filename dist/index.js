@@ -1,43 +1,38 @@
-import { defineComponent as I, inject as M, computed as T, onMounted as A, watch as N, onBeforeUnmount as z, h as P } from "vue";
-const F = /* @__PURE__ */ new Set([
+import { defineComponent as I, inject as T, computed as M, onMounted as N, watch as _, onBeforeUnmount as z, h as A } from "vue";
+const P = /* @__PURE__ */ new Set([
   "isthattrue",
   // legacy package name
   "chatluna-fact-check",
   "koishi-plugin-isthattrue",
   // legacy package name
   "koishi-plugin-chatluna-fact-check"
-]), C = [
+]), S = [
   {
-    title: "工具与模型",
+    title: "基础与工具",
     sections: [
-      { key: "tools", title: "工具注册" },
-      { key: "models", title: "LLM AI 接入" }
+      { key: "base", title: "基础" },
+      { key: "tool", title: "tool" }
     ]
   },
   {
-    title: "搜索与服务",
+    title: "搜索与抓取",
     sections: [
-      { key: "search", title: "搜索策略" },
-      { key: "services", title: "外部服务" }
-    ]
-  },
-  {
-    title: "调试/兼容",
-    sections: [
-      { key: "debug", title: "调试与排障" }
+      { key: "search", title: "search" },
+      { key: "web_fetch", title: "web_fetch" },
+      { key: "jina", title: "jina" }
     ]
   }
-], O = C.flatMap((t) => t.sections), L = {
-  tools: ["工具注册", "Fact Check 工具", "Deep Search 工具", "Web Fetch 工具"],
-  models: ["LLM AI 接入", "模型接入", "AI 模型接入"],
-  search: ["搜索策略", "搜索配置", "超时配置", "排序与策略", "最大字数"],
-  services: ["外部服务", "Grok 网络搜索", "Jina Reader 配置"],
-  debug: ["调试与排障", "调试"]
-}, b = "isthattrue-nav-style";
-function B() {
-  if (document.getElementById(b)) return;
+], O = S.flatMap((t) => t.sections), C = {
+  base: ["基础"],
+  tool: ["tool", "工具配置"],
+  search: ["search", "搜索配置"],
+  web_fetch: ["web_fetch", "网页抓取配置"],
+  jina: ["jina", "Jina 配置"]
+}, k = "isthattrue-nav-style";
+function j() {
+  if (document.getElementById(k)) return;
   const t = document.createElement("style");
-  t.id = b, t.textContent = `
+  t.id = k, t.textContent = `
 .isthattrue-nav {
   position: fixed;
   top: 260px;
@@ -105,7 +100,7 @@ function B() {
   color: var(--k-text-light, #9ca3af);
   opacity: 0.9;
 }
-/* Shrink nested sub-section headers inside intersect groups (e.g. DeepSearch sub-sections) */
+/* Shrink nested sub-section headers inside intersect groups. */
 .k-schema-group .k-schema-group .k-schema-header {
   font-size: 0.85em;
   margin-top: 0.4em;
@@ -113,29 +108,29 @@ function B() {
 }
 `, document.head.appendChild(t);
 }
-function p(t) {
+function h(t) {
   return t.replace(/\s+/g, "").trim();
 }
-function w() {
+function E() {
   return Array.from(document.querySelectorAll(
     ".k-schema-section-title, .k-schema-header, h2.k-schema-header"
   ));
 }
-function D(t) {
-  const e = [t.title, ...L[t.key] || []].map((i) => p(i)).filter(Boolean), r = w();
+function B(t) {
+  const e = [t.title, ...C[t.key] || []].map((i) => h(i)).filter(Boolean), r = E();
   for (const i of r) {
-    const o = p(i.textContent || "");
+    const o = h(i.textContent || "");
     if (o && e.some((d) => o.includes(d)))
       return i;
   }
   return null;
 }
-function S(t) {
-  const e = p(t);
-  return O.find((r) => [r.title, ...L[r.key] || []].map((o) => p(o)).filter(Boolean).some((o) => e.includes(o)));
+function w(t) {
+  const e = h(t);
+  return O.find((r) => [r.title, ...C[r.key] || []].map((o) => h(o)).filter(Boolean).some((o) => e.includes(o)));
 }
-function _() {
-  B();
+function q() {
+  j();
   const t = document.querySelector(".isthattrue-nav");
   t == null || t.remove();
   const e = document.createElement("div");
@@ -147,13 +142,13 @@ function _() {
 <div class="isthattrue-nav-body"></div>
 `, document.body.appendChild(e);
   const r = e.querySelector(".isthattrue-nav-body"), i = e.querySelector(".isthattrue-nav-toggle"), o = e.querySelector(".isthattrue-nav-header"), d = /* @__PURE__ */ new Map();
-  for (const n of C) {
+  for (const n of S) {
     const a = document.createElement("div");
     a.className = "isthattrue-nav-group", a.textContent = n.title, r.appendChild(a);
     for (const s of n.sections) {
       const c = document.createElement("button");
       c.type = "button", c.className = "isthattrue-nav-item", c.textContent = s.title, c.addEventListener("click", () => {
-        const u = D(s);
+        const u = B(s);
         u && u.scrollIntoView({ behavior: "smooth", block: "start" });
       }), r.appendChild(c), d.set(s.key, c);
     }
@@ -163,13 +158,13 @@ function _() {
     const a = e.classList.toggle("collapsed");
     i.textContent = a ? "⌃" : "⌄";
   });
-  let h = 0, m = 0, g = 0, f = 0;
+  let p = 0, m = 0, f = 0, g = 0;
   o.addEventListener("pointerdown", (n) => {
-    n.target.closest(".isthattrue-nav-toggle") || (n.preventDefault(), o.setPointerCapture(n.pointerId), h = n.clientX, m = n.clientY, g = parseFloat(e.style.right || "60"), f = parseFloat(e.style.top || "260"));
+    n.target.closest(".isthattrue-nav-toggle") || (n.preventDefault(), o.setPointerCapture(n.pointerId), p = n.clientX, m = n.clientY, f = parseFloat(e.style.right || "60"), g = parseFloat(e.style.top || "260"));
   }), o.addEventListener("pointermove", (n) => {
     if (!o.hasPointerCapture(n.pointerId)) return;
-    const a = n.clientX - h, s = n.clientY - m;
-    e.style.top = `${Math.max(0, f + s)}px`, e.style.right = `${Math.max(0, g - a)}px`;
+    const a = n.clientX - p, s = n.clientY - m;
+    e.style.top = `${Math.max(0, g + s)}px`, e.style.right = `${Math.max(0, f - a)}px`;
   });
   const v = (n) => {
     o.hasPointerCapture(n.pointerId) && o.releasePointerCapture(n.pointerId);
@@ -181,10 +176,10 @@ function _() {
       var s;
       for (const c of a) {
         if (!c.isIntersecting) continue;
-        const u = (c.target.textContent || "").trim(), k = S(u);
-        if (k) {
-          for (const E of d.values()) E.classList.remove("active");
-          (s = d.get(k.key)) == null || s.classList.add("active");
+        const u = (c.target.textContent || "").trim(), b = w(u);
+        if (b) {
+          for (const L of d.values()) L.classList.remove("active");
+          (s = d.get(b.key)) == null || s.classList.add("active");
           break;
         }
       }
@@ -193,10 +188,10 @@ function _() {
       rootMargin: "-20% 0px -60% 0px",
       threshold: 0
     });
-    const n = w();
+    const n = E();
     for (const a of n) {
       const s = a.textContent || "";
-      S(s) && l.observe(a);
+      w(s) && l.observe(a);
     }
   }, y = new MutationObserver(() => {
     window.setTimeout(x, 200);
@@ -205,26 +200,26 @@ function _() {
     l == null || l.disconnect(), y.disconnect(), e.remove();
   };
 }
-const q = I({
+const F = I({
   name: "FactCheckDetailsLoader",
   setup() {
-    const t = M("plugin:name"), e = T(() => {
+    const t = T("plugin:name"), e = M(() => {
       const o = t == null ? void 0 : t.value;
-      return !!o && F.has(o);
+      return !!o && P.has(o);
     });
     let r = null;
     const i = () => {
-      r == null || r(), r = null, e.value && (r = _());
+      r == null || r(), r = null, e.value && (r = q());
     };
-    return A(i), N(e, i), z(() => r == null ? void 0 : r()), () => P("div", { style: { display: "none" } });
+    return N(i), _(e, i), z(() => r == null ? void 0 : r()), () => A("div", { style: { display: "none" } });
   }
-}), G = (t) => {
+}), Y = (t) => {
   t.slot({
     type: "plugin-details",
-    component: q,
+    component: F,
     order: -999
   });
 };
 export {
-  G as default
+  Y as default
 };

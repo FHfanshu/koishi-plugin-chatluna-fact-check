@@ -23,14 +23,14 @@ export function clipText(input: string, maxLength: number): string {
 }
 
 export function resolveSummaryModel(config: PluginConfig): string {
-  const explicit = normalizeModelName(config.models.summaryModel)
-  if (explicit) return explicit
+  const source = (config.search.sources || []).find((item) => (
+    item.type === 'chatluna_model'
+      && normalizeModelName(item.model)
+  ))
 
-  const gemini = normalizeModelName(config.models.geminiModel)
-  if (gemini) return gemini
-
-  const controller = normalizeModelName(config.models.controllerModel)
-  if (controller) return controller
+  if (source?.type === 'chatluna_model') {
+    return normalizeModelName(source.model)
+  }
 
   return ''
 }
@@ -39,12 +39,17 @@ export async function maybeSummarize(
   ctx: Ctx,
   config: PluginConfig,
   text: string,
-  label: string
+  label: string,
+  options?: {
+    enabled?: boolean
+    maxChars?: number
+  }
 ): Promise<string> {
   const logger = ctx.logger('chatluna-fact-check')
-  const maxChars = config.search.summaryMaxChars || 800
+  const maxChars = options?.maxChars || Math.max(200, Math.min(config.search.maxFindingsChars || 3_000, 8_000))
+  const enabled = options?.enabled === true
 
-  if (!config.search.enableSummary) {
+  if (!enabled) {
     logger.info(`[Summary] 已禁用摘要压缩，保留原始输出: ${label}`)
     return text
   }
@@ -67,7 +72,7 @@ export async function maybeSummarize(
         systemPrompt: SUMMARY_SYSTEM_PROMPT,
         message: `请将以下内容压缩到 ${maxChars} 字以内，保留关键结论和来源：\n\n${text}`,
       }),
-      (config.search.summaryTimeout || 15) * 1000,
+      Math.max(5, Math.min(config.timeoutSeconds || 120, 60)) * 1000,
       `Summary(${label})`
     )
 

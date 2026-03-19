@@ -21,25 +21,14 @@ export class SubSearchAgent {
     this.logger = ctx.logger('chatluna-fact-check')
   }
 
-  async deepSearch(claim: string): Promise<AgentSearchResult> {
-    const deepSearchGrokModel = normalizeModelName(this.config.models.deepSearchGrokModel)
-    const grokFallbackModel = normalizeModelName(this.config.models.grokModel)
-
-    return this.deepSearchWithModel(
-      claim,
-      this.normalizeDeepSearchGrokModel(deepSearchGrokModel, grokFallbackModel),
-      'grok-deep-search',
-      'Grok 深度搜索 (X/Twitter)'
-    )
-  }
-
   async deepSearchWithModel(
     claim: string,
     modelName: string,
     agentId = 'multi-search',
     perspective = '多源深度搜索',
     promptOverride?: string,
-    systemPromptOverride?: string
+    systemPromptOverride?: string,
+    allowFallback = true
   ): Promise<AgentSearchResult> {
     this.logger.info(`[SubSearchAgent] 开始深度搜索，模型: ${modelName}`)
 
@@ -50,8 +39,7 @@ export class SubSearchAgent {
           message: promptOverride || buildSubSearchPrompt(claim),
           systemPrompt: systemPromptOverride || DEEP_SEARCH_AGENT_SYSTEM_PROMPT,
           enableSearch: true,
-        },
-        this.config.debug.maxRetries
+        }
       )
 
       const parsed = this.parseResponse(response.content)
@@ -67,38 +55,20 @@ export class SubSearchAgent {
         confidence,
       }
     } catch (error: any) {
-      const fallbackModel = normalizeModelName(this.config.models.grokModel)
-      if (
-        fallbackModel
-        && fallbackModel !== modelName
-        && this.shouldFallbackToFastModel(error)
-      ) {
-        this.logger.warn(`[SubSearchAgent] 深搜模型 ${modelName} 返回流式解析异常，回退到 ${fallbackModel}`)
-        return this.deepSearchWithModel(
-          claim,
-          fallbackModel,
-          agentId,
-          `${perspective} (fallback fast)`,
-          promptOverride,
-          systemPromptOverride
-        )
-      }
-
-      const geminiFallback = normalizeModelName(this.config.models.geminiModel)
-      if (
-        geminiFallback
-        && geminiFallback !== modelName
-        && this.shouldFallbackToFastModel(error)
-      ) {
-        this.logger.warn(`[SubSearchAgent] 模型 ${modelName} 返回流式解析异常，回退到 Gemini: ${geminiFallback}`)
-        return this.deepSearchWithModel(
-          claim,
-          geminiFallback,
-          agentId,
-          `${perspective} (fallback gemini)`,
-          promptOverride,
-          systemPromptOverride
-        )
+      if (allowFallback && this.shouldFallbackToFastModel(error)) {
+        const fallbackModel = this.resolveFallbackModel(modelName)
+        if (fallbackModel) {
+          this.logger.warn(`[SubSearchAgent] 模型 ${modelName} 异常，回退到 ${fallbackModel}`)
+          return this.deepSearchWithModel(
+            claim,
+            fallbackModel,
+            agentId,
+            `${perspective} (fallback)`,
+            promptOverride,
+            systemPromptOverride,
+            false
+          )
+        }
       }
 
       this.logger.error('[SubSearchAgent] 搜索失败:', error)
@@ -127,18 +97,16 @@ export class SubSearchAgent {
       || message.includes('status code: 429')
   }
 
-  private normalizeDeepSearchGrokModel(preferredModel: string | undefined, fallbackModel: string | undefined): string {
-    const preferred = (preferredModel || '').trim()
-    if (!preferred) {
-      return fallbackModel || 'x-ai/grok-4-1'
+  private resolveFallbackModel(currentModel: string): string {
+    const normalizedCurrent = normalizeModelName(currentModel)
+    for (const source of this.config.search.sources || []) {
+      if (source.type !== 'chatluna_model') continue
+      const model = normalizeModelName(source.model)
+      if (model && model !== normalizedCurrent) {
+        return model
+      }
     }
-
-    if (/beta/i.test(preferred)) {
-      this.logger.warn(`[SubSearchAgent] deepSearchGrokModel=${preferred} 包含 beta，已回退到 grokModel`) 
-      return fallbackModel || 'x-ai/grok-4-1'
-    }
-
-    return preferred
+    return ''
   }
 
   private parseResponse(content: string): ParsedSubSearchResponse {
