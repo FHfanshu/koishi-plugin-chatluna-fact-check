@@ -294,6 +294,12 @@ export function registerFactCheckTool(ctx: Ctx, config: PluginConfig): void {
   ctx.effect(() => {
     logger.info(`[FactCheckTool] 注册工具: ${toolName}`)
     const dispose = chatluna.platform.registerTool(toolName, {
+      description: toolDescription,
+      meta: {
+        source: 'extension',
+        group: 'fact-check',
+        tags: ['fact-check', 'search'],
+      },
       createTool() {
         return new FactCheckTool(ctx, config, toolName, toolDescription)
       },
