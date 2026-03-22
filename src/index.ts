@@ -23,7 +23,7 @@ export const usage = `
 
 配置要点：
 1. 在 \`search.chatluna.models\` 中配置 Chatluna 模型来源。
-2. 在 \`search.custom.sources\` 中配置可扩展来源（内置支持 chatluna / tavily，后续可扩展）。
+2. 在 \`search.custom.sources\` 中配置可扩展来源（当前内置 Tavily）。
 3. \`timeoutSeconds\` 控制 fact_check 快速返回最大等待时长。`
 
 export function apply(ctx: Context, config: PluginConfig): void {

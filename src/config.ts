@@ -3,10 +3,9 @@ import { Schema } from 'koishi'
 import type { PluginConfig, SourceConfig } from './types'
 
 const customSourceSchema = Schema.object({
-  provider: Schema.string().default('tavily').description('来源标识（例如 chatluna、tavily）'),
-  model: Schema.dynamic('model').default('').description('Chatluna 模型（provider=chatluna 时使用）'),
+  provider: Schema.const('tavily').default('tavily').hidden().description('来源标识（固定 tavily）'),
   tavilyApiKey: Schema.string().role('secret').default('').description('Tavily API Key（provider=tavily 时使用）'),
-}).description('自定义来源项') as Schema<SourceConfig>
+}).description('Tavily 来源项') as Schema<SourceConfig>
 
 const legacySourceSchema = Schema.union([
   Schema.object({
@@ -40,7 +39,7 @@ const searchSchema = Schema.object({
     chatluna: Schema.object({
       models: Schema.array(
         Schema.dynamic('model').description('搜索模型')
-      ).default([]).description('Chatluna 模型列表'),
+      ).role('table').default([]).description('Chatluna 模型列表'),
     }).description('Chatluna 模型来源'),
     custom: Schema.object({
       sources: Schema.array(customSourceSchema).default([]).description('可扩展来源列表'),

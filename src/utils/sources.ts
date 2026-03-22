@@ -56,60 +56,61 @@ export function collectSearchSources(config: PluginConfig): ResolvedSearchSource
   const seen = new Set<string>()
   let seq = 0
 
-  const chatlunaModels = config.search?.chatluna?.models || []
-  for (const rawModel of chatlunaModels) {
-    const model = normalizeModelName(rawModel)
-    if (!model) continue
+  const pushChatlunaModel = (provider: string, rawModel: unknown): void => {
+    const model = normalizeModelName(typeof rawModel === 'string' ? rawModel : String(rawModel || ''))
+    if (!model) return
     const key = `chatluna:${model}`
-    if (seen.has(key)) continue
+    if (seen.has(key)) return
     seen.add(key)
     seq += 1
     results.push({
       kind: 'chatluna_model',
-      provider: 'chatluna',
+      provider,
       model,
       key: `source-${seq}`,
     })
   }
 
-  const customSources = [
-    ...(config.search?.custom?.sources || []),
-    ...collectLegacySources(config),
-  ]
+  const pushTavilySource = (provider: string, rawApiKey: unknown): void => {
+    const tavilyApiKey = String(rawApiKey || '').trim()
+    if (!tavilyApiKey) return
+    const key = `tavily:${tavilyApiKey}`
+    if (seen.has(key)) return
+    seen.add(key)
+    seq += 1
+    results.push({
+      kind: 'tavily',
+      provider: provider || 'tavily',
+      tavilyApiKey,
+      key: `source-${seq}`,
+    })
+  }
+
+  const chatlunaModels = config.search?.chatluna?.models || []
+  for (const rawModel of chatlunaModels) {
+    pushChatlunaModel('chatluna', rawModel)
+  }
+
+  const customSources = config.search?.custom?.sources || []
 
   for (const source of customSources) {
     const provider = normalizeProvider((source as any)?.provider)
-    if (!provider) continue
+    const resolvedProvider = provider || 'tavily'
+    if (!TAVILY_PROVIDER_SET.has(resolvedProvider)) continue
+    pushTavilySource(resolvedProvider, (source as any)?.tavilyApiKey)
+  }
 
+  const legacySources = collectLegacySources(config)
+  for (const source of legacySources) {
+    const provider = normalizeProvider((source as any)?.provider)
+    if (!provider) continue
     if (CHATLUNA_PROVIDER_SET.has(provider)) {
-      const model = normalizeModelName((source as any)?.model)
-      if (!model) continue
-      const key = `chatluna:${model}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      seq += 1
-      results.push({
-        kind: 'chatluna_model',
-        provider,
-        model,
-        key: `source-${seq}`,
-      })
+      pushChatlunaModel(provider, (source as any)?.model)
       continue
     }
 
     if (TAVILY_PROVIDER_SET.has(provider)) {
-      const tavilyApiKey = String((source as any)?.tavilyApiKey || '').trim()
-      if (!tavilyApiKey) continue
-      const key = `tavily:${tavilyApiKey}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      seq += 1
-      results.push({
-        kind: 'tavily',
-        provider,
-        tavilyApiKey,
-        key: `source-${seq}`,
-      })
+      pushTavilySource(provider, (source as any)?.tavilyApiKey)
     }
   }
 
