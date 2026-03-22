@@ -87,7 +87,10 @@ export function collectSearchSources(config: PluginConfig): ResolvedSearchSource
   }
 
   const chatlunaModels = config.search?.chatluna?.models || []
-  for (const rawModel of chatlunaModels) {
+  for (const modelItem of chatlunaModels) {
+    const rawModel = typeof modelItem === 'string'
+      ? modelItem
+      : (modelItem as any)?.model
     pushChatlunaModel('chatluna', rawModel)
   }
 

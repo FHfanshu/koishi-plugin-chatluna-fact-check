@@ -22,7 +22,9 @@ export interface Config {
     };
     search: {
         chatluna: {
-            models: string[];
+            models: Array<string | {
+                model: string;
+            }>;
         };
         custom: {
             sources: SourceConfig[];
