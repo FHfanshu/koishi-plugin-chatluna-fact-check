@@ -7,9 +7,7 @@ const customSourceSchema = Schema.object({
   tavilyApiKey: Schema.string().role('secret').default('').description('Tavily API Key（provider=tavily 时使用）'),
 }).description('Tavily 来源项') as Schema<SourceConfig>
 
-const chatlunaModelItemSchema = Schema.object({
-  model: Schema.dynamic('model').default('').description('搜索模型'),
-}).description('搜索模型项')
+const chatlunaModelItemSchema = Schema.dynamic('model').default('').description('搜索模型')
 
 const legacySourceSchema = Schema.union([
   Schema.object({
@@ -41,9 +39,7 @@ const toolSchema = Schema.object({
 const searchSchema = Schema.object({
   search: Schema.object({
     chatluna: Schema.object({
-      models: Schema.array(
-        chatlunaModelItemSchema
-      ).role('table').default([]).description('Chatluna 模型列表'),
+      models: Schema.array(chatlunaModelItemSchema).default([]).description('Chatluna 模型列表'),
     }).description('Chatluna 模型来源'),
     custom: Schema.object({
       sources: Schema.array(customSourceSchema).default([]).description('可扩展来源列表'),
