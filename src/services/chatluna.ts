@@ -7,6 +7,21 @@ type Ctx = any
 export class ChatlunaAdapter {
   private static readonly MODEL_BLOCK_TTL_MS = 10 * 60 * 1000
   private static readonly temporaryBlockedModels = new Map<string, number>()
+  private static readonly NON_RETRYABLE_PATTERNS = [
+    "unexpected token 'd'",
+    "unexpected token 'e'",
+    'is not valid json',
+    'chat.completion.chunk',
+    '"data: {"',
+    'event: error',
+    'appchatreverse: chat failed, 429',
+    'chat failed, 429',
+    'status code: 429',
+    'appchatreverse: chat failed, 403',
+    'chat failed, 403',
+    'status code: 403',
+    'upstream_error',
+  ] as const
 
   private readonly logger: any
 
@@ -99,7 +114,7 @@ export class ChatlunaAdapter {
         this.logger.warn(`请求失败 (尝试 ${attempt + 1}/${maxRetries + 1}):`, error)
 
         if (this.shouldStopRetryForCurrentModel(error, currentModel)) {
-          this.logger.warn(`检测到 ${currentModel} 返回 SSE 分块解析异常，停止重试该模型`) 
+          this.logger.warn(`检测到 ${currentModel} 命中不可重试错误（SSE/上游拒绝），停止重试该模型`)
           this.blockModelTemporarily(currentModel)
           break
         }
@@ -119,21 +134,66 @@ export class ChatlunaAdapter {
   }
 
   private shouldStopRetryForCurrentModel(error: unknown, modelName: string): boolean {
-    const model = (modelName || '').toLowerCase()
+    const model = String(modelName || '').toLowerCase()
+    const fingerprint = this.getErrorFingerprint(error)
+
+    const matched = ChatlunaAdapter.NON_RETRYABLE_PATTERNS.some((pattern) => fingerprint.includes(pattern))
+    if (matched) {
+      return true
+    }
+
+    // Grok 渠道偶发把 SSE 错误包装在更外层对象里，这里兜底拦截。
     if (!model.includes('grok')) {
       return false
     }
 
-    const message = String((error as any)?.message || error || '').toLowerCase()
-    return message.includes("unexpected token 'd'")
-      || message.includes("unexpected token 'e'")
-      || message.includes('is not valid json')
-      || message.includes('chat.completion.chunk')
-      || message.includes('"data: {"')
-      || message.includes('event: error')
-      || message.includes('appchatreverse: chat failed, 429')
-      || message.includes('chat failed, 429')
-      || message.includes('status code: 429')
+    return fingerprint.includes('event:')
+      && fingerprint.includes('data:')
+      && fingerprint.includes('error')
+  }
+
+  private getErrorFingerprint(error: unknown): string {
+    const parts: string[] = []
+    const visited = new Set<any>()
+    const queue: any[] = [error]
+
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current || visited.has(current)) {
+        continue
+      }
+      visited.add(current)
+
+      if (typeof current === 'string') {
+        parts.push(current)
+        continue
+      }
+
+      if (current instanceof Error) {
+        if (current.message) parts.push(current.message)
+        if (current.stack) parts.push(current.stack)
+      }
+
+      if (typeof current === 'object') {
+        for (const key of ['message', 'stack', 'code', 'name']) {
+          const value = (current as Record<string, unknown>)[key]
+          if (typeof value === 'string' && value) {
+            parts.push(value)
+          }
+        }
+
+        for (const key of ['originError', 'cause', 'error']) {
+          const nested = (current as Record<string, unknown>)[key]
+          if (nested && typeof nested === 'object') {
+            queue.push(nested)
+          } else if (typeof nested === 'string') {
+            parts.push(nested)
+          }
+        }
+      }
+    }
+
+    return parts.join('\n').toLowerCase()
   }
 
   private isModelTemporarilyBlocked(modelName: string): boolean {

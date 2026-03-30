@@ -14,6 +14,23 @@ interface ParsedSubSearchResponse {
 }
 
 export class SubSearchAgent {
+  private static readonly FALLBACK_PATTERNS = [
+    "unexpected token 'd'",
+    "unexpected token 'e'",
+    '"data: {"',
+    'is not valid json',
+    'chat.completion.chunk',
+    'event: error',
+    'appchatreverse: chat failed, 429',
+    'chat failed, 429',
+    'status code: 429',
+    'appchatreverse: chat failed, 403',
+    'chat failed, 403',
+    'status code: 403',
+    'upstream_error',
+    '模型暂时熔断',
+  ] as const
+
   private readonly chatluna: ChatlunaAdapter
   private readonly logger: any
 
@@ -86,16 +103,52 @@ export class SubSearchAgent {
   }
 
   private shouldFallbackToFastModel(error: unknown): boolean {
-    const message = String((error as any)?.message || error || '').toLowerCase()
-    return message.includes("unexpected token 'd'")
-      || message.includes("unexpected token 'e'")
-      || message.includes('"data: {"')
-      || message.includes('is not valid json')
-      || message.includes('chat.completion.chunk')
-      || message.includes('event: error')
-      || message.includes('appchatreverse: chat failed, 429')
-      || message.includes('chat failed, 429')
-      || message.includes('status code: 429')
+    const message = this.getErrorFingerprint(error)
+    return SubSearchAgent.FALLBACK_PATTERNS.some((pattern) => message.includes(pattern))
+  }
+
+  private getErrorFingerprint(error: unknown): string {
+    const parts: string[] = []
+    const visited = new Set<any>()
+    const queue: any[] = [error]
+
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current || visited.has(current)) {
+        continue
+      }
+      visited.add(current)
+
+      if (typeof current === 'string') {
+        parts.push(current)
+        continue
+      }
+
+      if (current instanceof Error) {
+        if (current.message) parts.push(current.message)
+        if (current.stack) parts.push(current.stack)
+      }
+
+      if (typeof current === 'object') {
+        for (const key of ['message', 'stack', 'code', 'name']) {
+          const value = (current as Record<string, unknown>)[key]
+          if (typeof value === 'string' && value) {
+            parts.push(value)
+          }
+        }
+
+        for (const key of ['originError', 'cause', 'error']) {
+          const nested = (current as Record<string, unknown>)[key]
+          if (nested && typeof nested === 'object') {
+            queue.push(nested)
+          } else if (typeof nested === 'string') {
+            parts.push(nested)
+          }
+        }
+      }
+    }
+
+    return parts.join('\n').toLowerCase()
   }
 
   private resolveFallbackModel(currentModel: string): string {
